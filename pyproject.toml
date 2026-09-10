@@ -1,0 +1,17 @@
+[project]
+name = "goodtohike"
+version = "0.1.0"
+description = "An API for building reports about trail conditions."
+readme = "README.md"
+authors = [
+    { name = "Ron", email = "ronzappardino@icloud.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.6,<0.13.0"]
+build-backend = "uv_build"

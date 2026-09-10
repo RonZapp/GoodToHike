@@ -127,7 +127,7 @@ may grow as learning to cotinues.
 
 ## Stack
 
-Python 3.12, FastAPI, MySQL, Docker Compose.
+Python 3.14, FastAPI, MySQL, Docker Compose.
 
 ## Running
 
@@ -135,6 +135,10 @@ Python 3.12, FastAPI, MySQL, Docker Compose.
 cp .env.example .env
 docker compose up
 ```
+
+## Implementation goals
+
+- `/v1/` prefix from the start for versioning
 
 ## Status
 
