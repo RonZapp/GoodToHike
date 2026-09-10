@@ -3,8 +3,8 @@
 It's easy to find hiking trails online. But are they actually hikeable *right
 now*?
 
-GoodToHike is an API that answers whether trail will try to kill you. (And more
-benign things like road and campground closures.)
+GoodToHike is an API that answers whether your trail will try to kill you. (And 
+more benign things like road and campground closures.)
 
 Give it a route and it pulls together current conditions from public data
 sources — streamflow, snowpack, weather, closures, fire activity — and returns a
