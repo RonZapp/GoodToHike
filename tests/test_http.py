@@ -1,4 +1,4 @@
-from src.goodtohike.http import make_http_client
+from goodtohike.http import make_http_client
 
 
 def test_make_http_client_sets_user_agent():
