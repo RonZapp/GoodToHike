@@ -2,6 +2,10 @@ From documentation: "The new API will use headers to modify the version and form
 
 Make sure to send an `Accept` header rather than relying on the default so that our program can be protected if the default changes.
 
+Documentation says versioning will be done through headers but never says which header, parameter, or values. 
+- Tested `Accept: application/geo+json; version=1`, `version=999`, and `version=banana` on 2026-09-10, all returned 200 with the same content-type and byte-identical bodies to a request with no version.
+- The server does parse `Accept` (asking for `application/ld+json` changes the response), so it isn't the whole header being ignored, the version parameter specifically is ignored. Not sending it.
+
 API claims it requires a User-Agent in the request header, but responded even when it wasn't provided. Good to provide anyways, as the actual language says it **may** be blocked without User-Agent, not that it will be blocked without User-Agent.
 
 Specification: https://www.weather.gov/documentation/services-web-api
