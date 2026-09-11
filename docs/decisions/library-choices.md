@@ -29,3 +29,15 @@
 **Choice:** SQLite via SQLAlchemy
 
 **Reason:** Long term intention is to use MySQL, SQLite is faster to get running and utilizing it through SQLAlchemy allows us to switch to MySQL later.
+
+## GPX parsing
+
+**Choice:** gpxpy
+
+**Reason:** Handles GPX 1.0 and 1.1, XML namespaces, and the track segment/point nesting. Exposes tracks and routes as separate collections, which lets us reject a route-only export with a clear error instead of silently producing a bad elevation profile.
+
+## ASGI server
+
+**Choice:** uvicorn
+
+**Reason:** FastAPI is a framework and ships no server, but Uvicorn is what FastAPI's own docs assume.
