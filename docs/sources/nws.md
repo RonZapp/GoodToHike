@@ -10,9 +10,13 @@ API claims it requires a User-Agent in the request header, but responded even wh
 
 Specification: https://www.weather.gov/documentation/services-web-api
 
-Timestamps are in UTC
+https://api.weather.gov/openapi.json is authoritative, the docs page is only a rendering. Grep the spec when they disagree.
+
+Timestamps are UTC, except astronomicalData in /points/ which carries local offsets (-07:00).
 
 Use /points/{lat},{lon} to get grid and office, those can be used to get the actual forecast.
+
+Spec calls the office wfo, response body calls it gridId. Same value.
 
 The response from /points/ itself carries a direct link to the API to get forecasts for that polygon, you don't need to generate it yourself.
 
@@ -21,6 +25,10 @@ Forecast result is cacheable for up to 1 hour, max-age is sent each time to accu
 
 Freshness can be extracted from updateTime in response body, reuse from cache-control in header.
 
+Weak ETag is sent, If-None-Match works.
+
 Gridpoint data is per-cell, not per-point.
 
 Weather and other values are run-length encoded intervals, not regularized intervals.
+
+Rate limits are not published. Retry after 5s on 429/503.

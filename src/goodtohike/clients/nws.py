@@ -21,3 +21,9 @@ class NwsClient:
 
     def get_point(self, lat: float, lon: float) -> dict:
         return self._get(f"/points/{lat},{lon}")
+
+    def get_gridpoint(self, grid_id: str, grid_x: int, grid_y: int) -> dict:
+        return self._get(f"/gridpoints/{grid_id}/{grid_x},{grid_y}")
+
+    def get_gridpoint_forecast(self, grid_id: str, grid_x: int, grid_y: int) -> dict:
+        return self._get(f"/gridpoints/{grid_id}/{grid_x},{grid_y}/forecast")
