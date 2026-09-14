@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Response
 
 from goodtohike.api.routes import get_elevation_filler
+from goodtohike.elevation_profile import MAX_PROFILE_POINTS, PROFILE_SPACING_M
 from goodtohike.route import Point, RawPoint
 
 SAMPLES = Path(__file__).parents[2] / "samples"
@@ -105,6 +106,44 @@ def test_created_at_carries_a_utc_offset(client: TestClient):
 
 def test_unknown_route_is_a_404_problem(client: TestClient):
     response = client.get("/v1/routes/999")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.json()["status"] == 404
+
+
+def test_profile_of_an_uploaded_route(client: TestClient):
+    created = upload(client, SYNTHETIC / "one-clean-walk.gpx")
+
+    response = client.get(f"{created.headers['location']}/profile")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["spacing_m"] == PROFILE_SPACING_M
+    assert body["length_m"] == pytest.approx(created.json()["length_m"])
+    first, last = body["points"][0], body["points"][-1]
+    assert first["distance_m"] == 0.0
+    assert first["grade_percent"] is None
+    assert last["distance_m"] == pytest.approx(body["length_m"])
+
+
+def test_profile_of_a_real_track_is_spread_out(client: TestClient):
+    created = upload(client, HIKINGGUY / "lost-coast-trail.gpx")
+
+    body = client.get(f"{created.headers['location']}/profile").json()
+
+    points = body["points"]
+    assert len(points) <= MAX_PROFILE_POINTS
+    # About 40 km at 50 m spacing, so hundreds of points, not the whole track.
+    assert 600 < len(points) < created.json()["point_count"]
+    distances = [point["distance_m"] for point in points]
+    assert distances == sorted(distances)
+    assert body["gain_m"] > 0
+    assert body["loss_m"] > 0
+
+
+def test_profile_of_unknown_route_is_a_404_problem(client: TestClient):
+    response = client.get("/v1/routes/999/profile")
 
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"

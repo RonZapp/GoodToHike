@@ -1,6 +1,6 @@
 """The /routes endpoints:
 
-submitting a track and reading back the route built from it.
+submitting a track, reading back the route built from it, and its profile.
 """
 
 from collections.abc import Iterator
@@ -20,8 +20,9 @@ from fastapi import (
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
-from goodtohike.db import RouteRecord, route_to_record
+from goodtohike.db import RouteRecord, record_to_route, route_to_record
 from goodtohike.elevation import ElevationFiller
+from goodtohike.elevation_profile import build_profile
 from goodtohike.gpx import parse_gpx
 from goodtohike.ingest import build_route
 
@@ -37,6 +38,24 @@ class RouteSummary(BaseModel):
     point_count: int
     length_m: float
     created_at: datetime
+
+
+class ProfilePointResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    distance_m: float
+    elevation_m: float
+    grade_percent: float | None
+
+
+class RouteProfile(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    spacing_m: float
+    length_m: float
+    gain_m: float
+    loss_m: float
+    points: list[ProfilePointResponse]
 
 
 def get_elevation_filler(request: Request) -> ElevationFiller:
@@ -80,3 +99,17 @@ def get_route(
     if record is None:
         raise HTTPException(status_code=404, detail=f"No route has id {route_id}.")
     return RouteSummary.model_validate(record)
+
+
+@router.get("/routes/{route_id}/profile")
+def get_route_profile(
+    route_id: int,
+    session: Annotated[Session, Depends(get_session)],
+) -> RouteProfile:
+    record = session.get(RouteRecord, route_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"No route has id {route_id}.")
+    # Reading the points loads the deferred column, inside this request's
+    # session.
+    profile = build_profile(record_to_route(record).points)
+    return RouteProfile.model_validate(profile)

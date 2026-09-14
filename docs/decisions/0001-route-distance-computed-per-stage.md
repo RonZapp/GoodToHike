@@ -36,3 +36,20 @@ It may be tougher to address this later after other components are built that re
 This decision leans on GPX parsing being the slower step that happens right before route building. If routes are built from points that were not just parsed, such as rebuilding stored routes after tuning the thresholds in `gaps.py`, that comparison no longer applies and route building becomes the main cost. Rebuilding many stored routes at once is where this would add up.
 
 Cost also grows with the number of points in a track, so a track much larger than our largest sample could make this a noticeable part of upload time.
+
+## Revisited 2026-09-14
+
+The profile endpoint needs distance at every point, which was this decision's stated trigger. A profile request parses nothing, so the comparison with GPX parsing above no longer applies to it.
+
+Measured on the Timberline sample, median of seven runs, against a SQLite file database:
+
+| Step on a profile request | Time |
+| --- | --- |
+| Load the route and decode its points | 20 ms |
+| Compute distance along the route, one pass | 22 ms |
+
+Retrieving stored distances would cost about the same as recalculating them. Recalculating stays: the cost is small for a single request, and storing distances would add a second copy of the geometry that could disagree with the points, plus a schema change that `create_all` cannot apply to an existing database.
+
+Routes never change after upload, so HTTP caching with `ETag` and `Cache-Control` can serve repeat requests faster than either option. That caching is planned but not yet built.
+
+The second alternative above, caching distances on the data class, is now rejected as well. A profile request rebuilds the route from storage every time, so a cached value would never be reused.
