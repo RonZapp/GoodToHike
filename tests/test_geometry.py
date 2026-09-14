@@ -71,6 +71,7 @@ def test_hops_of_reversed_track_are_reversed():
 
 # get_cumulative_m
 
+
 def test_cumulative_of_zero_points_is_empty_list():
     assert get_cumulative_m([]) == []
 
