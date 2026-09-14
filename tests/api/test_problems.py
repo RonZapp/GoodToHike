@@ -117,6 +117,23 @@ def test_track_without_elevation_is_a_no_elevation_problem(client: TestClient):
     assert body["title"] == "Track has no elevation"
 
 
+@pytest.mark.parametrize("not_a_height", ["NaN", "inf"])
+def test_track_whose_elevations_are_not_numbers_is_a_no_elevation_problem(
+    client: TestClient, not_a_height: str
+):
+    content = gpx(
+        "<trk><trkseg>"
+        f'<trkpt lat="45.0" lon="-121.0"><ele>{not_a_height}</ele></trkpt>'
+        f'<trkpt lat="45.0006" lon="-121.0"><ele>{not_a_height}</ele></trkpt>'
+        "</trkseg></trk>"
+    )
+
+    response = upload(client, content)
+
+    # Treated as missing rather than read as a height, so nothing to fill from.
+    assert_problem(response, 422, "no-elevation")
+
+
 # A track with no elevation, so a lookup filler has to ask for every point.
 NO_ELEVATION_TRACK = gpx(
     "<trk><trkseg>"
@@ -187,6 +204,28 @@ def test_unusable_file_is_an_invalid_gpx_problem(
     body = assert_problem(response, 422, "invalid-gpx")
     # The uploader-facing message from goodtohike.gpx reaches them unchanged.
     assert body["detail"] == message
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon"),
+    [("999", "-121.0"), ("45.0", "-5000"), ("NaN", "-121.0")],
+    ids=["latitude out of range", "longitude out of range", "latitude nan"],
+)
+def test_point_that_is_not_on_earth_is_an_invalid_gpx_problem(
+    client: TestClient, lat: str, lon: str
+):
+    content = gpx(
+        "<trk><trkseg>"
+        '<trkpt lat="45.0" lon="-121.0"><ele>100</ele></trkpt>'
+        f'<trkpt lat="{lat}" lon="{lon}"><ele>100</ele></trkpt>'
+        "</trkseg></trk>"
+    )
+
+    response = upload(client, content)
+
+    body = assert_problem(response, 422, "invalid-gpx")
+    assert body["detail"].startswith("Track point 1 is at latitude")
+    assert "not a place on Earth" in body["detail"]
 
 
 # Errors raised by FastAPI and Starlette rather than by GoodToHike

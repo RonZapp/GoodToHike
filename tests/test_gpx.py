@@ -61,6 +61,25 @@ def test_parse_gpx_blanks_placeholder_zero_elevation(zero):
     assert track.points == [(47.0, -123.0, None)]
 
 
+@pytest.mark.parametrize("not_a_height", ["NaN", "nan", "inf", "-inf", "Infinity"])
+def test_parse_gpx_blanks_elevation_that_is_not_a_number(not_a_height):
+    track = parse_gpx(gpx(trk(trkpt(47.0, -123.0, not_a_height))))
+
+    assert track.points == [(47.0, -123.0, None)]
+
+
+def test_parse_gpx_keeps_real_elevations_beside_a_blanked_nan():
+    points = [trkpt(47.0, -123.0, 100), trkpt(47.001, -123.0, "NaN")]
+
+    track = parse_gpx(gpx(trk(*points, trkpt(47.002, -123.0, 120))))
+
+    assert track.points == [
+        (47.0, -123.0, 100.0),
+        (47.001, -123.0, None),
+        (47.002, -123.0, 120.0),
+    ]
+
+
 @pytest.mark.parametrize("elevation", [-3.5, 0.4, 1234.0])
 def test_parse_gpx_keeps_nonzero_elevation(elevation):
     # Death Valley is below sea level, and a coastal track can sit at 0.4 m.
@@ -216,3 +235,51 @@ def test_parse_gpx_rejects_a_file_without_track_points(children):
         parse_gpx(gpx(*children))
 
     assert str(caught.value) == NO_POINTS
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon"),
+    [
+        (999.0, -123.0),
+        (-90.0001, -123.0),
+        (47.0, 180.0001),
+        (47.0, -5000.0),
+        (float("nan"), -123.0),
+        (47.0, float("nan")),
+        (float("inf"), -123.0),
+        (47.0, float("-inf")),
+    ],
+    ids=[
+        "latitude far out",
+        "latitude just past a pole",
+        "longitude just past the antimeridian",
+        "longitude far out",
+        "latitude nan",
+        "longitude nan",
+        "latitude inf",
+        "longitude negative inf",
+    ],
+)
+def test_parse_gpx_rejects_coordinates_that_are_not_on_earth(lat, lon):
+    with pytest.raises(GpxError):
+        parse_gpx(gpx(trk(trkpt(lat, lon, 1))))
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon"),
+    [(90.0, 180.0), (-90.0, -180.0), (0.0, 0.0)],
+    ids=["north pole on the antimeridian", "south pole", "null island"],
+)
+def test_parse_gpx_accepts_coordinates_on_the_edges_of_the_range(lat, lon):
+    track = parse_gpx(gpx(trk(trkpt(lat, lon, 1))))
+
+    assert track.points == [(lat, lon, 1.0)]
+
+
+def test_parse_gpx_names_the_first_point_that_is_not_on_earth():
+    points = [trkpt(47.0, -123.0, 1), trkpt(999.0, -123.0, 1), trkpt(-999.0, 0, 1)]
+
+    with pytest.raises(GpxError) as caught:
+        parse_gpx(gpx(trk(*points)))
+
+    assert "Track point 1 is at latitude 999.0, longitude -123.0" in str(caught.value)

@@ -5,6 +5,8 @@ judge gaps, and does not fetch anything: those are decisions, and they live
 in :mod:`goodtohike.gaps` and :mod:`goodtohike.ingest`.
 """
 
+import math
+
 import gpxpy
 from gpxpy.gpx import GPX, GPXTrack
 
@@ -35,6 +37,10 @@ NOT_DECODABLE = (
 NOT_GPX = "File could not be parsed as GPX."
 NO_POINTS = "This GPX file contains no track points."
 
+# The ranges a real place on Earth falls in.
+LATITUDE_RANGE = (-90.0, 90.0)
+LONGITUDE_RANGE = (-180.0, 180.0)
+
 
 class GpxError(ValueError):
     """A GPX upload that cannot be turned into a usable track.
@@ -48,16 +54,47 @@ def _count_points(track: GPXTrack) -> int:
     return sum(len(segment.points) for segment in track.segments)
 
 
-def _blank_placeholder_elevations(gpx: GPX) -> int:
-    """Turn placeholder zeros into None, returning how many were blanked."""
+def _is_unusable_elevation(elevation: float | None) -> bool:
+    """Whether an elevation the file gave should be treated as missing.
+
+    gpxpy reads <ele>NaN</ele> and <ele>inf</ele> as floats, but they are unusable.
+    We also need to be wary of altitudes of 0, a common placeholder when devices don't
+    read altitude.
+    """
+    if elevation is None:
+        return False
+    return elevation == PLACEHOLDER_ELEVATION or not math.isfinite(elevation)
+
+
+def _blank_unusable_elevations(gpx: GPX) -> int:
+    """Turn placeholder zeros, NaN and infinities into None.
+
+    Returns how many were blanked.
+    """
     blanked = 0
     for track in gpx.tracks:
         for segment in track.segments:
             for point in segment.points:
-                if point.elevation == PLACEHOLDER_ELEVATION:
+                if _is_unusable_elevation(point.elevation):
                     point.elevation = None
                     blanked += 1
     return blanked
+
+
+def _find_off_the_map(points: list[RawPoint]) -> int | None:
+    """Index of the first point that is not a place on Earth, or None."""
+    lat_low, lat_high = LATITUDE_RANGE
+    lon_low, lon_high = LONGITUDE_RANGE
+    # Written as "in range" rather than "out of range" on purpose. Every
+    # comparison with NaN is False, so only this form rejects it.
+    return next(
+        (
+            index
+            for index, (lat, lon, _) in enumerate(points)
+            if not (lat_low <= lat <= lat_high and lon_low <= lon <= lon_high)
+        ),
+        None,
+    )
 
 
 def _get_name(gpx: GPX) -> str | None:
@@ -73,9 +110,11 @@ def _get_name(gpx: GPX) -> str | None:
 def parse_gpx(raw: bytes) -> ParsedTrack:
     """Turn the bytes of an uploaded GPX file into a track.
 
-    Reports elevation exactly as the file gave it, minus placeholder zeros.
+    Reports elevation exactly as the file gave it, minus placeholder zeros
+    and values that are not numbers at all, which become None.
 
-    Raises :class:`GpxError` for anything that cannot yield track points.
+    Raises :class:`GpxError` for anything that cannot yield track points,
+    or that yields a point which is not a place on Earth.
     """
     try:
         text = raw.decode(ENCODING)
@@ -89,7 +128,7 @@ def parse_gpx(raw: bytes) -> ParsedTrack:
         # it picked, so its exceptions are not a usable contract.
         raise GpxError(NOT_GPX) from exc
 
-    _blank_placeholder_elevations(gpx)
+    _blank_unusable_elevations(gpx)
 
     # Every track and every segment, in file order, flattened into one list.
     # track_seams will record where the tracks split from one-another
@@ -110,6 +149,16 @@ def parse_gpx(raw: bytes) -> ParsedTrack:
     if not points:
         # A route-only export is the common mistake and earns its own message.
         raise GpxError(ROUTE_NOT_TRACK if gpx.routes else NO_POINTS)
+
+    off_the_map = _find_off_the_map(points)
+    if off_the_map is not None:
+        lat, lon, _ = points[off_the_map]
+        raise GpxError(
+            f"Track point {off_the_map} is at latitude {lat}, longitude {lon}, "
+            f"which is not a place on Earth. Latitude must be between "
+            f"{LATITUDE_RANGE[0]:g} and {LATITUDE_RANGE[1]:g}, and longitude "
+            f"between {LONGITUDE_RANGE[0]:g} and {LONGITUDE_RANGE[1]:g}."
+        )
 
     return ParsedTrack(
         points=points,

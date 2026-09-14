@@ -43,7 +43,8 @@ extra tracks. Upload a file containing only the track that was walked.
 
 No point in the track carries an elevation, and the server is filling
 elevation from the track's own data. Elevations of exactly zero count as
-missing, since many devices write zero when they have no reading.
+missing, since many devices write zero when they have no reading. So do
+elevations that are not numbers at all, such as `NaN` or `inf`.
 
 Export the track again with elevation included.
 
@@ -82,6 +83,7 @@ these applies:
 | The file is not valid GPX. | Check that the export finished and the file is complete. |
 | The file holds a GPX route, not a GPX track. | Re-export and choose "GPX Track". |
 | The file holds no track points. | Export a track that was actually recorded. |
+| A point's coordinates are not a place on Earth. | The `detail` names the first such point. Latitude must be between -90 and 90, and longitude between -180 and 180. Export the track again, or correct that point. |
 
 ## invalid-request
 
