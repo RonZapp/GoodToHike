@@ -4,14 +4,24 @@ submitting a track and reading back the route built from it.
 """
 
 from collections.abc import Iterator
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from pydantic import BaseModel
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+)
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from goodtohike.db import RouteRecord, route_to_record
 from goodtohike.elevation import ElevationFiller
-from goodtohike.geometry import get_cumulative_m
 from goodtohike.gpx import parse_gpx
 from goodtohike.ingest import build_route
 
@@ -19,10 +29,14 @@ router = APIRouter(tags=["routes"])
 
 
 class RouteSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
     name: str
     source: str
     point_count: int
     length_m: float
+    created_at: datetime
 
 
 def get_elevation_filler(request: Request) -> ElevationFiller:
@@ -31,22 +45,38 @@ def get_elevation_filler(request: Request) -> ElevationFiller:
 
 def get_session(request: Request) -> Iterator[Session]:
     """A database session for one request, closed once the response is sent."""
-    with Session(request.app.state.engine) as session:
+    # Keep loaded values after commit, so building the response does not
+    # reload the row, points and all.
+    with Session(request.app.state.engine, expire_on_commit=False) as session:
         yield session
 
 
 @router.post("/routes", status_code=201)
 def create_route(
+    request: Request,
+    response: Response,
     file: Annotated[UploadFile, File()],
     elevation_filler: Annotated[ElevationFiller, Depends(get_elevation_filler)],
+    session: Annotated[Session, Depends(get_session)],
     name: Annotated[str | None, Form()] = None,
 ) -> RouteSummary:
-    raw = file.file.read()
-    track = parse_gpx(raw)
+    track = parse_gpx(file.file.read())
     route = build_route(track, elevation_filler, name)
-    return RouteSummary(
-        name=route.name,
-        source=track.source,
-        point_count=len(route.points),
-        length_m=get_cumulative_m(route.points)[-1],
-    )
+
+    record = route_to_record(route)
+    session.add(record)
+    session.commit()
+
+    response.headers["Location"] = str(request.url_for("get_route", route_id=record.id))
+    return RouteSummary.model_validate(record)
+
+
+@router.get("/routes/{route_id}")
+def get_route(
+    route_id: int,
+    session: Annotated[Session, Depends(get_session)],
+) -> RouteSummary:
+    record = session.get(RouteRecord, route_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"No route has id {route_id}.")
+    return RouteSummary.model_validate(record)

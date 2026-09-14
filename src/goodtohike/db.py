@@ -51,7 +51,10 @@ class RouteRecord(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(MAX_NAME_LENGTH))
     source: Mapped[str] = mapped_column(String(40))
-    points: Mapped[list[list[float]]] = mapped_column(JSON)
+    # deferred tells SQLAlchemy to not load this column when loading a record,
+    # it will only load our relatively large JSON when coe actually reads
+    # record.points
+    points: Mapped[list[list[float]]] = mapped_column(JSON, deferred=True)
     point_count: Mapped[int]
     length_m: Mapped[float]
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
