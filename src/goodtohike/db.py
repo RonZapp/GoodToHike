@@ -7,6 +7,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from goodtohike.geometry import get_cumulative_m
 from goodtohike.route import MAX_NAME_LENGTH, Route
+from goodtohike.water_reports import MAX_NOTE_LENGTH, MAX_WATER_SOURCE_ID_LENGTH
 
 
 class UtcDateTime(TypeDecorator[datetime]):
@@ -58,6 +59,22 @@ class RouteRecord(Base):
     point_count: Mapped[int]
     length_m: Mapped[float]
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
+
+
+class WaterReportRecord(Base):
+    __tablename__ = "water_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Indexed, because every read looks reports up by their water source.
+    water_source_id: Mapped[str] = mapped_column(
+        String(MAX_WATER_SOURCE_ID_LENGTH), index=True
+    )
+    status: Mapped[str] = mapped_column(String(10))
+    note: Mapped[str | None] = mapped_column(String(MAX_NOTE_LENGTH))
+    # When the reporter saw the water, which can be days before they regained
+    # signal and sent the report.
+    observed_at: Mapped[datetime] = mapped_column(UtcDateTime)
+    received_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utc_now)
 
 
 def route_to_record(route: Route) -> RouteRecord:

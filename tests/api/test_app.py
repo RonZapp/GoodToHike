@@ -38,7 +38,7 @@ def test_startup_creates_the_tables(app: FastAPI, engine: Engine):
     assert inspect(engine).get_table_names() == []
 
     with TestClient(app):
-        assert inspect(engine).get_table_names() == ["routes"]
+        assert inspect(engine).get_table_names() == ["routes", "water_reports"]
 
 
 def test_elevation_is_looked_up_by_default(engine: Engine):

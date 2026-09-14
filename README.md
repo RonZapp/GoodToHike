@@ -17,7 +17,8 @@ trip brief you can read before you lose signal.
 Early, with the core path working end to end. Upload a GPX track and GoodToHike
 checks that it is one continuous walk, straight-lines gaps in the recording,
 fills in missing elevation from USGS 3DEP, and stores it. From there it serves
-the route's elevation profile and a weather forecast along it.
+the route's elevation profile and a weather forecast along it. It also takes
+field reports on whether a water source is running.
 
 Water sources, snow, closures and trip plans are next.
 
@@ -52,7 +53,8 @@ Reads:
 | ✅ | `GET` | `/v1/routes/{id}/conditions` | Snow, streamflow, weather, closures, fire. Weather only so far. |
 | ⬜ | `GET` | `/v1/routes/{id}/trail-reports` | Trail reports near a route |
 | ⬜ | `GET` | `/v1/plans/{id}` | A plan, with a day-by-day brief built from current conditions |
-| ⬜ | `GET` | `/v1/water-sources/{id}/reports` | Report history for a water source |
+| ✅ | `GET` | `/v1/water-sources/{id}/reports` | Report history for a water source |
+| ✅ | `GET` | `/v1/water-sources/{id}/reports/{report_id}` | One water source report |
 
 Writes:
 
@@ -61,7 +63,7 @@ Writes:
 | ✅ | `POST` | `/v1/routes` | Ingest a GPX file or OSM relation. GPX only so far. |
 | ⬜ | `POST` | `/v1/routes/{id}/plans` | Create a plan from dates and pace |
 | ⬜ | `PATCH` | `/v1/plans/{id}` | Change a plan's dates or pace |
-| ⬜ | `POST` | `/v1/water-sources/{id}/reports` | Field report: flowing, trickle, dry |
+| ✅ | `POST` | `/v1/water-sources/{id}/reports` | Field report: flowing, trickle, dry |
 | ⬜ | `POST` | `/v1/trail-reports` | Snow depth, blowdown, or ford at a location |
 
 ## Getting a route in
@@ -175,7 +177,7 @@ Set with environment variables.
 
 | Variable | Default | Controls |
 | --- | --- | --- |
-| `GOODTOHIKE_DATABASE_URL` | `sqlite:///goodtohike.db` | Where routes are stored, as a SQLAlchemy database URL |
+| `GOODTOHIKE_DATABASE_URL` | `sqlite:///goodtohike.db` | Where routes and reports are stored, as a SQLAlchemy database URL |
 | `GOODTOHIKE_ELEVATION_FILL` | `hybrid` | How missing elevation is filled |
 
 `GOODTOHIKE_ELEVATION_FILL` accepts one of these, and any other value stops the

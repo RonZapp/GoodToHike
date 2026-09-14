@@ -10,6 +10,7 @@ from sqlalchemy import Engine, create_engine
 
 from goodtohike.api.problems import add_problem_handlers
 from goodtohike.api.routes import router as routes_router
+from goodtohike.api.water_sources import router as water_sources_router
 from goodtohike.clients.epqs import EpqsClient
 from goodtohike.clients.nws import NwsClient, NwsWeather
 from goodtohike.db import Base
@@ -84,6 +85,7 @@ def get_app(
     v1 = APIRouter(prefix=V1_PREFIX)
     v1.include_router(meta_router)
     v1.include_router(routes_router)
+    v1.include_router(water_sources_router)
     app.include_router(v1)
     # One pooled HTTP client for every upstream service, closed on shutdown.
     app.state.http = make_http_client()
