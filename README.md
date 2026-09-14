@@ -1,5 +1,7 @@
 # GoodToHike
 
+[![CI](https://github.com/RonZapp/GoodToHike/actions/workflows/ci.yml/badge.svg)](https://github.com/RonZapp/GoodToHike/actions/workflows/ci.yml)
+
 It's easy to find hiking trails online. But are they actually hikeable *right
 now*?
 
@@ -10,38 +12,29 @@ Give it a route and it pulls together current conditions from public data
 sources — streamflow, snowpack, weather, closures, fire activity — and returns a
 trip brief you can read before you lose signal.
 
-## Why
+## Status
 
-Finding a trail on a platform like AllTrails is easy. Knowing its current state
-is not.
+Early, with the core path working end to end. Upload a GPX track and GoodToHike
+checks that it is one continuous walk, straight-lines gaps in the recording,
+fills in missing elevation from USGS 3DEP, and stores it. From there it serves
+the route's elevation profile and a weather forecast along it.
 
-Is the creek at mile 14 fordable? Is that spring we are depending on to refill
-our water still running? How far down does the snow go on the north side of the
-pass? Is the road to the trailhead open?
-
-The underlying data mostly exists. USGS runs thousands of real-time stream
-gauges. NRCS runs automated snow telemetry stations. The Park Service publishes
-closures. It is all public and free. It is just scattered across a dozen
-agencies, in a dozen formats, indexed by station or park rather than by the
-route you are actually walking.
-
-GoodToHike does that join so you don't have to. It maps a route's geometry
-against the sensors near it and produces one document.
+Water sources, snow, closures and trip plans are next.
 
 ## Data sources
 
 All public. Most require no authentication.
 
-✅ implemented · 🟨 partly implemented · ⬜ planned
+✅ implemented · ⬜ planned
 
 | Status | Source | Provides | Auth |
 | :---: | --- | --- | --- |
 | ⬜ | OpenStreetMap (Overpass) | Trail geometry, water features, surface tags | None |
 | ⬜ | USGS Water Services | Real-time streamflow at gauge stations | None |
 | ⬜ | NRCS SNOTEL | Snow depth and water equivalent | None |
-| ✅ | National Weather Service | Gridded point forecasts | None |
+| ✅ | National Weather Service | 12-hour forecasts per grid cell | None |
 | ⬜ | Open-Meteo | Historical precipitation and temperature | None |
-| ✅ | USGS 3DEP | Elevation for profile computation | None |
+| ✅ | USGS 3DEP | Elevation for tracks that lack it | None |
 | ⬜ | National Park Service | Park alerts and closures | Free key |
 | ⬜ | NASA FIRMS | Active fire detections | Free key |
 
@@ -73,14 +66,7 @@ Writes:
 
 ## Getting a route in
 
-GoodToHike accepts a route two ways: an OpenStreetMap relation ID, or an
-uploaded GPX file.
-
-### From OpenStreetMap
-
-If the trail is a named route in OSM, pass its relation ID directly. Search for
-the trail on [openstreetmap.org](https://www.openstreetmap.org), open the
-relation, and take the number from the URL.
+GoodToHike accepts a route as an uploaded GPX track file.
 
 ### From AllTrails
 
@@ -94,31 +80,58 @@ straightforward but well hidden:
    **Download route** — same thing.
 4. In the format list, choose **GPX Track**.
 
-   This part matters. AllTrails offers both *GPX Track* and *GPX Route*. A track
+   AllTrails offers both *GPX Track* and *GPX Route*. A track
    is a dense series of recorded points that follows the trail's actual shape. A
    route is a sparse set of waypoints with straight lines between them. Only a
    track has enough resolution to compute a useful elevation profile or to find
    the exact points where the trail crosses water. If you pick the wrong one,
-   GoodToHike will accept the file but the output will be poor.
+   GoodToHike rejects the file with a message asking you to export it again as a
+   track.
 
-5. Save the `.gpx` file, then upload it:
+5. Save the `.gpx` file, then upload it. This example uses a sample track from
+   this repository:
 
-```
+   ```sh
    curl -X POST http://localhost:8000/v1/routes \
-     -F "file=@lawson-peak.gpx" \
-     -F "name=Lawson Peak"
-```
+     -F "file=@samples/hikingguy/elevation_added/enchanted-valley.gpx" \
+     -F "name=Enchanted Valley"
+   ```
+
+   The `name` field is optional. Without it, the route takes the name recorded
+   in the file. The response is `201 Created`, with the new route's URL in the
+   `Location` header:
+
+   ```json
+   {
+     "id": 1,
+     "name": "Enchanted Valley",
+     "source": "gpx",
+     "point_count": 780,
+     "length_m": 20610.932016594114,
+     "created_at": "2026-09-14T14:49:59.682476Z"
+   }
+   ```
 
 GPX from Gaia GPS, CalTopo, Garmin Connect, Strava, and Komoot works the same
 way — any GPX track file is fine.
 
 ## Accuracy and limits
 
-Conditions are inferred from the nearest available sensors, which may be miles
-away and at a different elevation than the point they are describing. Snow line
-estimates interpolate between SNOTEL stations. Streamflow at a crossing is
-approximated from the nearest gauge on the same waterway, which may be well
-upstream or downstream.
+Conditions come from the nearest available data, which may describe a different
+place and elevation than the point on the trail you care about. Today that
+means:
+
+- Weather forecasts cover a National Weather Service grid cell about 2.5 km
+  across, and are made for the cell's elevation rather than the trail's. A
+  route is forecast about every 25 km and at its highest point, so conditions
+  between those places are not shown.
+- Elevation missing from an uploaded track is looked up from USGS 3DEP or
+  interpolated between known points, so the profile is only as accurate as that
+  data.
+- Total climb and descent ignore changes smaller than 10 m, so that GPS noise is
+  not counted as climbing.
+- An upload missing elevation waits for those lookups, which can take tens of
+  seconds.
 
 This is planning information, not a safety guarantee. It is meant to tell you
 which questions to ask before a trip, not to tell you a crossing is safe. Trail
@@ -133,34 +146,72 @@ may grow as learning to cotinues.
 
 ## Stack
 
-Python 3.14, FastAPI, MySQL, Docker Compose.
+Python 3.14, FastAPI, SQLAlchemy on SQLite, httpx2, gpxpy and uv, checked in CI
+with pytest, ruff and pyright. The reasoning behind each choice is in
+[docs/decisions/library-choices.md](docs/decisions/library-choices.md).
 
 ## Running
 
+Requires [uv](https://docs.astral.sh/uv/).
+
+```sh
+uv sync
+uv run uvicorn goodtohike.api.app:app --reload
 ```
-cp .env.example .env
-docker compose up
+
+The API serves on `http://localhost:8000`, with interactive OpenAPI docs at
+`http://localhost:8000/docs`.
+
+To run the tests:
+
+```sh
+uv run pytest              # offline suite
+uv run pytest -m network   # calls the real upstream services
 ```
 
-## Implementation goals
+## Configuration
 
-- `/v1/` prefix from the start for versioning
+Set with environment variables.
 
-## Status
+| Variable | Default | Controls |
+| --- | --- | --- |
+| `GOODTOHIKE_DATABASE_URL` | `sqlite:///goodtohike.db` | Where routes are stored, as a SQLAlchemy database URL |
+| `GOODTOHIKE_ELEVATION_FILL` | `hybrid` | How missing elevation is filled |
 
-Early. Schema design and route ingest in progress. Nothing here works yet.
+`GOODTOHIKE_ELEVATION_FILL` accepts one of these, and any other value stops the
+app from starting:
 
-## Roadmap
+| Value | Behaviour |
+| --- | --- |
+| `hybrid` | Interpolates short gaps and looks long ones up from USGS 3DEP. A track that carries its own elevation makes no lookups. |
+| `interpolate` | Uses only the track's own elevation and makes no requests. A track with no elevation at all is rejected. |
+| `lookup-gaps` | Looks up every gap in elevation, however short. |
+| `lookup-every-point` | Replaces all elevation with one lookup per point. Practical only for short tracks. |
 
-- [ ] Route ingest: GPX parsing and OSM relation import
-- [ ] Elevation profile from 3DEP sampling
-- [ ] Water feature extraction from route geometry
-- [ ] USGS gauge and SNOTEL station matching
-- [ ] Conditions synthesis endpoint
-- [ ] Trip plan generation
-- [ ] Field reports and confidence scoring
-- [ ] Test suite with mocked upstream responses
-- [ ] OpenAPI document and CI
+## API conventions
+
+✅ implemented · 🟨 partly implemented · ⬜ planned
+
+| Status | Convention |
+| :---: | --- |
+| ✅ | `/v1/` prefix from the start |
+| ✅ | A consistent error body on every endpoint, following RFC 9457 problem details. Every type is documented in [docs/problems.md](docs/problems.md). |
+| ✅ | `201` with a `Location` header on creation |
+| ✅ | ISO 8601 timestamps with explicit offsets, UTC internally |
+| 🟨 | An OpenAPI document with runnable examples. Generated at `/docs`, without examples yet. |
+| ⬜ | Cursor-based pagination rather than offset |
+| ⬜ | `429` responses that include `Retry-After`, with documented limits |
+| ⬜ | `ETag` and `Cache-Control` on computed results, since profiles and conditions are expensive to derive and cheap to cache |
+| ⬜ | Idempotency keys on writes, so a retried request does not duplicate a report |
+
+## Documentation
+
+- [docs/decisions/](docs/decisions/): architecture decision records, with the
+  measurements behind each choice.
+- [docs/sources/](docs/sources/): how each upstream API actually behaves,
+  including quirks its own documentation leaves out.
+- [docs/problems.md](docs/problems.md): every error type the API returns, and
+  how to fix the request.
 
 ## License
 
