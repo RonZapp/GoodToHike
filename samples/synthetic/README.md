@@ -1,7 +1,7 @@
 # Synthetic fixtures
 
 Hand-built GPX files, each isolating one decision the ingest pipeline makes.
-Real sample tracks live in `../hikingguy/`; these exist so a behaviour can be
+Real sample tracks live elsewhere; these exist so a behaviour can be
 tested without depending on a real file happening to contain the right shape.
 
 | File | Exercises | Expected |

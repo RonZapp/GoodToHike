@@ -17,7 +17,10 @@ from goodtohike.geometry import get_hops_m
 from goodtohike.gpx import parse_gpx
 from goodtohike.route import RawPoint
 
-SYNTHETIC = Path(__file__).parents[1] / "samples" / "synthetic"
+SAMPLES = Path(__file__).parents[1] / "samples"
+SYNTHETIC = SAMPLES / "synthetic"
+HIKINGGUY = SAMPLES / "hikingguy" / "elevation_added"
+MULTI_TRACK = HIKINGGUY / "multi_track"
 
 # One degree of arc on gpxpy's sphere, radius 6,378,137 m. Written out rather
 # than computed, so a change to the underlying formula shows up here.
@@ -317,6 +320,28 @@ def test_fixture_rejected_for_a_jump(filename):
 
 def test_fixture_with_annotation_track_rejected_at_the_join():
     parsed = parse_fixture("walk-with-annotation-track.gpx")
+
+    with pytest.raises(TrackGapError, match="do not join up"):
+        check_track_joins(parsed.points, parsed.track_seams)
+
+
+# Real hikingguy tracks. The multi-track file is the same trail with hazard
+# zones stored as extra tracks, which is what the join check exists
+# to turn away.
+
+
+def test_real_single_track_accepted():
+    parsed = parse_gpx((HIKINGGUY / "lost-coast-trail.gpx").read_bytes())
+
+    check_track_joins(parsed.points, parsed.track_seams)
+    check_continuity(parsed.points)
+
+
+def test_real_file_with_feature_tracks_rejected_at_the_join():
+    # This file also fails check_continuity, but only by chance: a hazard zone
+    # less than MAX_HOP_M from the trail would slip past it. The join check is
+    # the one that has to catch them.
+    parsed = parse_gpx((MULTI_TRACK / "lost-coast-trail.gpx").read_bytes())
 
     with pytest.raises(TrackGapError, match="do not join up"):
         check_track_joins(parsed.points, parsed.track_seams)

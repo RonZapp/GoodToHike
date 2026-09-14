@@ -10,7 +10,9 @@ from goodtohike.api.routes import get_elevation_filler
 from goodtohike.gpx import NO_POINTS, NOT_DECODABLE, NOT_GPX, ROUTE_NOT_TRACK
 from goodtohike.route import Point, RawPoint
 
-SYNTHETIC = Path(__file__).parents[2] / "samples" / "synthetic"
+SAMPLES = Path(__file__).parents[2] / "samples"
+SYNTHETIC = SAMPLES / "synthetic"
+MULTI_TRACK = SAMPLES / "hikingguy" / "elevation_added" / "multi_track"
 
 GPX_CONTENT_TYPE = "application/gpx+xml"
 
@@ -80,6 +82,14 @@ def test_broken_track_is_a_track_gap_problem(client: TestClient, filename):
     body = assert_problem(response, 422, "track-gap")
     assert body["title"] == "Track is not one continuous walk"
     assert "km" in body["detail"]
+
+
+def test_real_file_with_feature_tracks_is_a_track_gap_problem(client: TestClient):
+    # The trail plus hazard zones stored as extra tracks.
+    response = upload(client, (MULTI_TRACK / "lost-coast-trail.gpx").read_bytes())
+
+    body = assert_problem(response, 422, "track-gap")
+    assert "do not join up" in body["detail"]
 
 
 def test_track_without_elevation_is_a_no_elevation_problem(client: TestClient):

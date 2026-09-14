@@ -11,6 +11,7 @@ from goodtohike.route import Point, RawPoint
 
 SAMPLES = Path(__file__).parents[2] / "samples"
 SYNTHETIC = SAMPLES / "synthetic"
+HIKINGGUY = SAMPLES / "hikingguy" / "elevation_added"
 
 GPX_CONTENT_TYPE = "application/gpx+xml"
 
@@ -67,9 +68,7 @@ def test_upload_uses_the_injected_elevation_filler(app: FastAPI):
 
 
 def test_upload_accepts_a_real_track(client: TestClient):
-    response = upload(
-        client, SAMPLES / "hikingguy" / "single_track" / "lost-coast-trail.gpx"
-    )
+    response = upload(client, HIKINGGUY / "lost-coast-trail.gpx")
 
     assert response.status_code == 201
     body = response.json()

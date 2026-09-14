@@ -11,6 +11,8 @@ from goodtohike.route import ParsedTrack, Point, RawPoint
 
 SAMPLES = Path(__file__).parents[1] / "samples"
 SYNTHETIC = SAMPLES / "synthetic"
+HIKINGGUY = SAMPLES / "hikingguy" / "elevation_added"
+MULTI_TRACK = HIKINGGUY / "multi_track"
 
 # One degree of arc on gpxpy's sphere, radius 6,378,137 m. Copied from
 # test_gaps.py; move both into a shared helper once a third file needs it.
@@ -83,6 +85,16 @@ def test_build_route_rejects_geometry_before_filling(filename):
     filler = RecordingFiller()
 
     with pytest.raises(TrackGapError):
+        build_route(track, filler)
+
+    assert filler.received is None
+
+
+def test_build_route_rejects_a_real_file_with_feature_tracks():
+    track = parse_fixture(MULTI_TRACK / "lost-coast-trail.gpx")
+    filler = RecordingFiller()
+
+    with pytest.raises(TrackGapError, match="do not join up"):
         build_route(track, filler)
 
     assert filler.received is None
@@ -173,11 +185,19 @@ def test_clean_fixture_keeps_every_recorded_elevation():
 
 def test_real_track_with_inserted_points_gets_elevation_everywhere():
     # fill_gaps inserts 4 points into this file, none of them with elevation.
-    track = parse_fixture(
-        SAMPLES / "hikingguy" / "elevation_added" / "hoh-river-trail.gpx"
-    )
+    track = parse_fixture(HIKINGGUY / "hoh-river-trail.gpx")
 
     route = build_route(track, InterpolateOnly())
 
     assert len(route.points) == len(track.points) + 4
+    assert all(elevation is not None for _, _, elevation in route.points)
+
+
+def test_real_single_track_gets_elevation_everywhere():
+    track = parse_fixture(HIKINGGUY / "lost-coast-trail.gpx")
+
+    route = build_route(track, InterpolateOnly())
+
+    assert route.name == track.name
+    assert len(route.points) >= len(track.points)
     assert all(elevation is not None for _, _, elevation in route.points)
