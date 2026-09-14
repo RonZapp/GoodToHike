@@ -2,9 +2,17 @@
 
 from goodtohike.elevation import ElevationFiller
 from goodtohike.gaps import check_continuity, check_track_joins, fill_gaps
-from goodtohike.route import ParsedTrack, Route
+from goodtohike.route import MAX_NAME_LENGTH, ParsedTrack, Route
 
 UNNAMED = "Unnamed route"
+
+
+def _choose_name(given: str | None, from_file: str | None) -> str:
+    """The uploader's name, then the file's, then a default."""
+    for candidate in (given, from_file):
+        if candidate and candidate.strip():
+            return candidate.strip()[:MAX_NAME_LENGTH].rstrip()
+    return UNNAMED
 
 
 def build_route(
@@ -15,8 +23,6 @@ def build_route(
     A given ``name`` wins over the track's own.
     A name that is empty or only whitespace counts as not given.
     """
-    if name and not name.strip():
-        name = None
 
     # Geometry first. A jump too large to be one walk is rejected outright,
     # and everything else is straight-lined.
@@ -28,7 +34,7 @@ def build_route(
     points_with_elevations = filler.fill(points_without_gaps)
 
     return Route(
-        name=name or track.name or UNNAMED,
+        name=_choose_name(name, track.name),
         points=points_with_elevations,
         source=track.source,
         inferred_ranges=inferred,

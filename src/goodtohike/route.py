@@ -6,6 +6,8 @@ elevation; a ``Route`` always does.
 
 from dataclasses import dataclass, field
 
+MAX_NAME_LENGTH = 200
+
 # Latitude, longitude, elevation in metres.
 # None means no usable elevation for that point.
 RawPoint = tuple[float, float, float | None]
