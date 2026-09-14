@@ -4,6 +4,7 @@ This module is designed to end at the boundary where work can no longer be
 done internally, ensure nothing is added here that does I/O.
 """
 
+import math
 from bisect import bisect_left
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -122,6 +123,63 @@ class HybridFill:
         for index, elevation in zip(lookups, looked_up, strict=True):
             elevations[index] = elevation
         return _interpolate(points, distance, elevations)
+
+
+@dataclass(frozen=True, kw_only=True)
+class LookUpGaps:
+    """Looks up elevation in every gap, however short, and keeps the rest.
+
+    Each gap has elevations looked up through ``fetch`` at points at least
+    ``spacing_m`` apart across it, up to ``DEFAULT_MAX_SAMPLES`` per gap, and
+    at least one lookup even for a single missing point. Points between
+    lookups are interpolated along the ground. Recorded elevations are kept.
+
+    The track's first and last points are always looked up when they have no
+    elevation, so neither end of the profile is held flat from a guess.
+    """
+
+    fetch: ElevationFetcher
+    spacing_m: float = DEFAULT_SPACING_M
+
+    def fill(self, points: Sequence[RawPoint]) -> list[Point]:
+        """Fills every gap from lookups, per the class docstring.
+
+        Returns [] for an empty track. Raises ValueError when ``fetch`` returns
+        a different number of elevations than it was asked for.
+        """
+        # HybridFill with no gap short enough to interpolate. Not 0: a missing
+        # point between two recorded ones on the same spot bridges 0 m.
+        hybrid = HybridFill(
+            fetch=self.fetch, spacing_m=self.spacing_m, max_gap_m=-math.inf
+        )
+        return hybrid.fill(points)
+
+
+@dataclass(frozen=True, kw_only=True)
+class LookUpEveryPoint:
+    """Replaces every elevation, recorded or missing, with its own lookup.
+
+    Nothing is interpolated and nothing recorded is kept, so the profile comes
+    entirely from the elevation service. GPS elevation is noisy, and this
+    trades it for one lookup per point: every coordinate goes to ``fetch`` in a
+    single call with no sample ceiling, so a 70,000-point track asks for
+    70,000 elevations, and splitting that into requests the service accepts
+    is the fetcher's job.
+    """
+
+    fetch: ElevationFetcher
+
+    def fill(self, points: Sequence[RawPoint]) -> list[Point]:
+        """Looks up an elevation for every point, per the class docstring.
+
+        Returns [] for an empty track. Raises ValueError when ``fetch`` returns
+        a different number of elevations than it was asked for.
+        """
+        looked_up = _look_up(points, range(len(points)), self.fetch)
+        return [
+            (lat, lon, elevation)
+            for (lat, lon, _), elevation in zip(points, looked_up, strict=True)
+        ]
 
 
 # The helpers below are private to this module, and trust what they are given

@@ -3,8 +3,11 @@ from collections.abc import Sequence
 import pytest
 
 from goodtohike.elevation import (
+    DEFAULT_MAX_SAMPLES,
     HybridFill,
     InterpolateOnly,
+    LookUpEveryPoint,
+    LookUpGaps,
 )
 from goodtohike.geometry import get_cumulative_m
 from goodtohike.route import RawPoint
@@ -330,4 +333,232 @@ def test_hybrid_fill_of_an_empty_track_is_empty():
     fetch = RecordingFetcher()
 
     assert HybridFill(fetch=fetch).fill([]) == []
+    assert fetch.calls == []
+
+
+# LookUpGaps
+
+
+def test_look_up_gaps_leaves_a_complete_track_unchanged_without_lookups():
+    fetch = RecordingFetcher()
+    points = [north(0, 100.0), north(80, 142.5), north(160, 97.0)]
+
+    assert LookUpGaps(fetch=fetch).fill(points) == points
+    assert fetch.calls == []
+
+
+def test_look_up_gaps_looks_up_a_short_gap_that_hybrid_fill_would_interpolate():
+    fetch = RecordingFetcher()
+    points = [north(0, 100.0), north(100), north(200, 300.0)]
+
+    filled = LookUpGaps(fetch=fetch).fill(points)
+
+    assert fetch.requested == coordinates(points[1])
+    assert elevations(filled) == [100.0, LOOKED_UP_M, 300.0]
+
+
+def test_look_up_gaps_looks_up_a_short_gap_at_the_track_start():
+    fetch = RecordingFetcher()
+    points = [north(0), north(100, 250.0), north(200, 260.0)]
+
+    filled = LookUpGaps(fetch=fetch).fill(points)
+
+    assert fetch.requested == coordinates(points[0])
+    assert elevations(filled) == [LOOKED_UP_M, 250.0, 260.0]
+
+
+@pytest.mark.parametrize(
+    "points",
+    [
+        pytest.param([north(0, 1.0), north(100, 1.0), north(200)], id="short-trailing"),
+        pytest.param(
+            [north(m) for m in range(0, 2000, 50)] + [north(2000, 1.0)],
+            id="long-leading",
+        ),
+        pytest.param(
+            [north(0, 1.0)] + [north(m) for m in range(50, 2050, 50)],
+            id="long-trailing",
+        ),
+        pytest.param(
+            [north(0), north(10), north(100, 1.0), north(190), north(200)],
+            id="both-ends",
+        ),
+        pytest.param(
+            [north(0, 1.0), north(100)] + [north(100)] * 5,
+            id="stationary-trailing",
+        ),
+        pytest.param(
+            [north(0, 1.0)] + [north(m) for m in range(1, 100_001)],
+            id="trailing-gap-at-sample-ceiling",
+        ),
+        pytest.param([north(m) for m in range(0, 1000, 10)], id="no-elevation"),
+    ],
+)
+def test_look_up_gaps_looks_up_the_track_ends_when_they_are_missing(points):
+    fetch = RecordingFetcher()
+
+    filled = LookUpGaps(fetch=fetch).fill(points)
+
+    for end in (0, -1):
+        if points[end][2] is None:
+            assert coordinates(points[end])[0] in fetch.requested
+            assert elevations(filled)[end] == LOOKED_UP_M
+
+
+def test_look_up_gaps_does_not_look_up_recorded_track_ends():
+    fetch = RecordingFetcher()
+    points = [north(0, 100.0), north(100), north(200, 300.0)]
+
+    LookUpGaps(fetch=fetch).fill(points)
+
+    assert coordinates(points[0])[0] not in fetch.requested
+    assert coordinates(points[-1])[0] not in fetch.requested
+
+
+def test_look_up_gaps_samples_a_long_gap_at_its_spacing():
+    fetch = RecordingFetcher()
+    missing = [north(m) for m in (100, 200, 300, 400, 500)]
+    points = [north(0, 100.0), *missing, north(600, 700.0)]
+
+    filled = LookUpGaps(fetch=fetch, spacing_m=200.0).fill(points)
+
+    assert fetch.requested == coordinates(missing[0], missing[2], missing[4])
+    assert elevations(filled)[0] == 100.0
+    assert elevations(filled)[-1] == 700.0
+
+
+def test_look_up_gaps_uses_its_spacing_setting():
+    fetch = RecordingFetcher()
+    missing = [north(m) for m in (100, 200, 300, 400, 500)]
+    points = [north(0, 100.0), *missing, north(600, 700.0)]
+
+    LookUpGaps(fetch=fetch, spacing_m=100.0).fill(points)
+
+    assert fetch.requested == coordinates(*missing)
+
+
+def test_look_up_gaps_spaces_lookups_at_least_spacing_m_apart():
+    # The missing run spans 399 m, which fits only one 200 m interval, so only
+    # its two ends are looked up.
+    missing = [north(m) for m in range(1, 401)]
+    fetch = RecordingFetcher()
+
+    LookUpGaps(fetch=fetch, spacing_m=200.0).fill([north(0, 1.0), *missing])
+
+    assert fetch.requested == coordinates(missing[0], missing[-1])
+
+
+@pytest.mark.parametrize("spacing_m", [0.0, -200.0], ids=["zero", "negative"])
+def test_look_up_gaps_looks_up_only_a_gaps_ends_without_a_positive_spacing(
+    spacing_m,
+):
+    # With no spacing to step by, a gap's ends are its only lookups, however
+    # long it is.
+    fetch = RecordingFetcher()
+    missing = [north(m) for m in (100, 200, 300, 400, 500)]
+    points = [north(0, 100.0), *missing, north(600, 700.0)]
+
+    LookUpGaps(fetch=fetch, spacing_m=spacing_m).fill(points)
+
+    assert fetch.requested == coordinates(missing[0], missing[-1])
+
+
+def test_look_up_gaps_asks_once_for_a_point_several_targets_land_on():
+    # Two points 1 km apart: six 200 m targets, but only two points to take.
+    fetch = RecordingFetcher()
+    points = [north(0), north(1000)]
+
+    LookUpGaps(fetch=fetch, spacing_m=200.0).fill(points)
+
+    assert fetch.requested == coordinates(*points)
+
+
+def test_look_up_gaps_never_exceeds_the_sample_ceiling_for_one_gap():
+    # 1 m spacing over a 999 m run wants 1,000 lookups. The run finishes
+    # standing still, so four points share its final distance, and only the
+    # last of them counts as its end.
+    missing = [north(m) for m in range(1000)] + [north(999)] * 3
+    fetch = RecordingFetcher()
+
+    LookUpGaps(fetch=fetch, spacing_m=1.0).fill([*missing, north(1500, 1.0)])
+
+    assert len(fetch.requested) == DEFAULT_MAX_SAMPLES
+    assert fetch.calls[0][-1] == coordinates(missing[-1])[0]
+
+
+def test_look_up_gaps_looks_up_a_gap_that_bridges_no_distance():
+    # A missing point between two recorded ones, all on one spot.
+    fetch = RecordingFetcher()
+    points = [north(0, 100.0), north(0), north(0, 300.0)]
+
+    filled = LookUpGaps(fetch=fetch).fill(points)
+
+    assert fetch.requested == coordinates(points[1])
+    assert elevations(filled) == [100.0, LOOKED_UP_M, 300.0]
+
+
+def test_look_up_gaps_asks_for_every_gap_in_one_call():
+    fetch = RecordingFetcher()
+    points = [north(0, 1.0), north(50), north(100, 1.0), north(150), north(200, 1.0)]
+
+    LookUpGaps(fetch=fetch).fill(points)
+
+    assert fetch.calls == [coordinates(points[1], points[3])]
+
+
+def test_look_up_gaps_looks_up_a_track_with_no_elevation():
+    fetch = RecordingFetcher()
+
+    filled = LookUpGaps(fetch=fetch).fill([north(0), north(100)])
+
+    assert elevations(filled) == [LOOKED_UP_M, LOOKED_UP_M]
+
+
+def test_look_up_gaps_of_an_empty_track_is_empty():
+    fetch = RecordingFetcher()
+
+    assert LookUpGaps(fetch=fetch).fill([]) == []
+    assert fetch.calls == []
+
+
+# LookUpEveryPoint
+
+
+def test_look_up_every_point_asks_for_every_coordinate_in_order_in_one_call():
+    fetch = RecordingFetcher()
+    points = [north(0, 100.0), north(100), north(200, 300.0)]
+
+    LookUpEveryPoint(fetch=fetch).fill(points)
+
+    assert fetch.calls == [coordinates(*points)]
+
+
+def test_look_up_every_point_uses_each_lookup_without_interpolating():
+    points = [north(0), north(100), north(200), north(300)]
+
+    filled = LookUpEveryPoint(fetch=numbered).fill(points)
+
+    assert elevations(filled) == [0.0, 1.0, 2.0, 3.0]
+
+
+def test_look_up_every_point_replaces_recorded_elevations():
+    points = [north(0, 100.0), north(80, 142.5), north(160, 97.0)]
+
+    filled = LookUpEveryPoint(fetch=numbered).fill(points)
+
+    assert elevations(filled) == [0.0, 1.0, 2.0]
+    assert coordinates(*filled) == coordinates(*points)
+
+
+def test_look_up_every_point_rejects_a_fetcher_that_answers_the_wrong_count():
+    points = [north(0), north(100)]
+
+    with pytest.raises(ValueError, match="asked for 2 elevations, fetcher returned 1"):
+        LookUpEveryPoint(fetch=lambda coords: [1.0]).fill(points)
+
+
+def test_look_up_every_point_of_an_empty_track_is_empty():
+    fetch = RecordingFetcher()
+
+    assert LookUpEveryPoint(fetch=fetch).fill([]) == []
     assert fetch.calls == []
