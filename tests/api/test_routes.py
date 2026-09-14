@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -7,7 +7,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
-from goodtohike.api.routes import get_elevation_filler
+from goodtohike.api.routes import get_elevation_filler, get_weather_source
+from goodtohike.conditions import (
+    Forecast,
+    ForecastPeriod,
+    GridCell,
+    NoWeatherCoverageError,
+)
 from goodtohike.elevation_profile import MAX_PROFILE_POINTS, PROFILE_SPACING_M
 from goodtohike.route import Point, RawPoint
 
@@ -30,6 +36,41 @@ class CountingFiller:
     def fill(self, points: Sequence[RawPoint]) -> list[Point]:
         self.calls += 1
         return [(lat, lon, FAKE_ELEVATION_M) for lat, lon, _ in points]
+
+
+class OneCellWeather:
+    """Puts everywhere in one cell with a one-period forecast, and counts requests."""
+
+    def __init__(self, covered: bool = True) -> None:
+        self.covered = covered
+        self.forecast_requests = 0
+
+    def get_cell(self, lat: float, lon: float) -> GridCell:
+        if not self.covered:
+            raise NoWeatherCoverageError(lat, lon)
+        return GridCell(office="TST", x=1, y=2)
+
+    def get_forecast(self, cell: GridCell) -> Forecast:
+        self.forecast_requests += 1
+        start = datetime(2026, 9, 14, 13, tzinfo=UTC)
+        return Forecast(
+            updated_at=start,
+            elevation_m=1_500.0,
+            periods=[
+                ForecastPeriod(
+                    name="Today",
+                    start_time=start,
+                    end_time=start + timedelta(hours=12),
+                    is_daytime=True,
+                    temperature_c=9.0,
+                    precipitation_chance_percent=None,
+                    wind_speed="7 to 17 km/h",
+                    wind_direction="WNW",
+                    short_forecast="Mostly Sunny",
+                    detailed_forecast="Mostly sunny, with a high near 9.",
+                )
+            ],
+        )
 
 
 def upload(client: TestClient, path: Path, **form: str) -> Response:
@@ -148,3 +189,45 @@ def test_profile_of_unknown_route_is_a_404_problem(client: TestClient):
     assert response.status_code == 404
     assert response.headers["content-type"] == "application/problem+json"
     assert response.json()["status"] == 404
+
+
+def test_conditions_forecast_the_start_end_and_high_point(
+    app: FastAPI, client: TestClient
+):
+    weather = OneCellWeather()
+    app.dependency_overrides[get_weather_source] = lambda: weather
+    created = upload(client, HIKINGGUY / "lost-coast-trail.gpx")
+
+    response = client.get(f"{created.headers['location']}/conditions")
+
+    assert response.status_code == 200
+    locations = response.json()["weather"]
+    assert locations[0]["distance_m"] == 0.0
+    assert locations[-1]["distance_m"] == pytest.approx(created.json()["length_m"])
+    assert sum(location["is_high_point"] for location in locations) == 1
+    # Every location is in the one cell, so one forecast serves them all.
+    assert weather.forecast_requests == 1
+    period = locations[0]["forecast"]["periods"][0]
+    assert period["temperature_c"] == 9.0
+    assert period["precipitation_chance_percent"] is None
+    assert datetime.fromisoformat(period["start_time"]).utcoffset() == timedelta(0)
+
+
+def test_conditions_outside_coverage_have_no_forecast(app: FastAPI, client: TestClient):
+    app.dependency_overrides[get_weather_source] = lambda: OneCellWeather(covered=False)
+    created = upload(client, SYNTHETIC / "one-clean-walk.gpx")
+
+    response = client.get(f"{created.headers['location']}/conditions")
+
+    assert response.status_code == 200
+    assert [location["forecast"] for location in response.json()["weather"]] == [
+        None,
+        None,
+    ]
+
+
+def test_conditions_of_unknown_route_is_a_404_problem(client: TestClient):
+    response = client.get("/v1/routes/999/conditions")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/problem+json"

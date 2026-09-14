@@ -70,6 +70,20 @@ response the server could not read. Nothing is wrong with the upload.
 Try again later. The `detail` is deliberately generic, and the error itself is
 logged on the server.
 
+## weather-service-failed
+
+**Status:** 502. **Title:** Weather service failed.
+
+Conditions for the route needed forecasts, and the upstream weather service
+did not give a usable answer: it failed, timed out, or sent a response the
+server could not read. Nothing is wrong with the route.
+
+Try again later. The `detail` is deliberately generic, and the error itself is
+logged on the server.
+
+A route that runs outside the weather service's coverage is not this problem.
+Those locations come back with a `forecast` of `null` instead.
+
 ## invalid-gpx
 
 **Status:** 422. **Title:** The GPX could not be processed.

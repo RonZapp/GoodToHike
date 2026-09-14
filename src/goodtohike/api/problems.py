@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from goodtohike.clients.epqs import ElevationServiceError, NoElevationDataError
+from goodtohike.conditions import WeatherServiceError
 from goodtohike.elevation import NoElevationError
 from goodtohike.gaps import TrackGapError
 from goodtohike.gpx import GpxError
@@ -31,6 +32,12 @@ UNEXPECTED_ERROR_DETAIL = "The server hit an unexpected error handling this requ
 ELEVATION_SERVICE_DETAIL = (
     "The elevation service failed to answer, so elevation for this track could "
     "not be looked up. Try again later."
+)
+
+# Fixed for the same reason as the elevation service's.
+WEATHER_SERVICE_DETAIL = (
+    "The weather service failed to answer, so conditions for this route could "
+    "not be gathered. Try again later."
 )
 
 logger = logging.getLogger(__name__)
@@ -118,6 +125,19 @@ async def handle_elevation_service_error(
     )
 
 
+async def handle_weather_service_error(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    logger.error("weather service failed", exc_info=exc)
+    return problem(
+        request,
+        status=502,
+        slug="weather-service-failed",
+        title="Weather service failed",
+        detail=WEATHER_SERVICE_DETAIL,
+    )
+
+
 async def handle_gpx_error(request: Request, exc: Exception) -> JSONResponse:
     return problem(
         request,
@@ -179,6 +199,7 @@ def add_problem_handlers(app: FastAPI) -> None:
     # MRO, so the subclass gets its own handler whatever the order here.
     app.add_exception_handler(NoElevationDataError, handle_outside_elevation_coverage)
     app.add_exception_handler(ElevationServiceError, handle_elevation_service_error)
+    app.add_exception_handler(WeatherServiceError, handle_weather_service_error)
     app.add_exception_handler(GpxError, handle_gpx_error)
     app.add_exception_handler(RequestValidationError, handle_invalid_request)
     # Starlette's class rather than FastAPI's subclass of it, because the

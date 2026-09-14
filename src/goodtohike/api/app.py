@@ -9,8 +9,10 @@ from sqlalchemy import Engine, create_engine
 
 from goodtohike.api.problems import add_problem_handlers
 from goodtohike.api.routes import router as routes_router
+from goodtohike.clients.nws import NwsClient, NwsWeather
 from goodtohike.db import Base
 from goodtohike.elevation import InterpolateOnly
+from goodtohike.http import make_http_client
 
 V1_PREFIX = "/v1"
 
@@ -30,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine: Engine = app.state.engine
     Base.metadata.create_all(engine)
     yield
+    app.state.http.close()
     engine.dispose()
 
 
@@ -45,6 +48,9 @@ def get_app(title: str, version: str, engine: Engine) -> FastAPI:
     v1.include_router(routes_router)
     app.include_router(v1)
     app.state.elevation_filler = InterpolateOnly()
+    # One pooled HTTP client for every upstream service, closed on shutdown.
+    app.state.http = make_http_client()
+    app.state.weather_source = NwsWeather(NwsClient(app.state.http))
     return app
 
 

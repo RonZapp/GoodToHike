@@ -7,8 +7,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
-from goodtohike.api.routes import get_elevation_filler
+from goodtohike.api.routes import get_elevation_filler, get_weather_source
 from goodtohike.clients.epqs import EpqsClient
+from goodtohike.clients.nws import NwsClient, NwsWeather
 from goodtohike.elevation import HybridFill
 from goodtohike.gpx import NO_POINTS, NOT_DECODABLE, NOT_GPX, ROUTE_NOT_TRACK
 from goodtohike.route import Point, RawPoint
@@ -288,4 +289,22 @@ def test_unexpected_error_is_a_generic_500_problem(app: FastAPI):
 
     body = assert_problem(response, 500, None)
     assert body["title"] == "Internal Server Error"
+    assert INTERNAL_MESSAGE not in response.text
+
+
+def test_weather_service_failure_is_a_502_problem_that_hides_the_upstream_body(
+    app: FastAPI, client: TestClient
+):
+    transport = httpx2.MockTransport(lambda _: Response(500, text=INTERNAL_MESSAGE))
+    weather = NwsWeather(NwsClient(httpx2.Client(transport=transport)))
+    app.dependency_overrides[get_weather_source] = lambda: weather
+    created = upload(client, (SYNTHETIC / "one-clean-walk.gpx").read_bytes())
+
+    response = client.get(f"{created.headers['location']}/conditions")
+
+    assert response.status_code == 502
+    assert response.headers["content-type"] == PROBLEM_CONTENT_TYPE
+    body = response.json()
+    assert set(body) == RFC_9457_FIELDS
+    assert body["type"] == f"{PROBLEM_DOCS}#weather-service-failed"
     assert INTERNAL_MESSAGE not in response.text

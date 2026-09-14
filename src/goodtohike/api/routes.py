@@ -1,6 +1,7 @@
 """The /routes endpoints:
 
-submitting a track, reading back the route built from it, and its profile.
+submitting a track, reading back the route built from it, its profile, and
+the conditions along it.
 """
 
 from collections.abc import Iterator
@@ -20,6 +21,7 @@ from fastapi import (
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from goodtohike.conditions import WeatherSource, get_route_forecasts
 from goodtohike.db import RouteRecord, record_to_route, route_to_record
 from goodtohike.elevation import ElevationFiller
 from goodtohike.elevation_profile import build_profile
@@ -58,8 +60,52 @@ class RouteProfile(BaseModel):
     points: list[ProfilePointResponse]
 
 
+class ForecastPeriodResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    start_time: datetime
+    end_time: datetime
+    is_daytime: bool
+    temperature_c: float
+    precipitation_chance_percent: float | None
+    wind_speed: str
+    wind_direction: str
+    short_forecast: str
+    detailed_forecast: str
+
+
+class ForecastResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    updated_at: datetime
+    elevation_m: float | None
+    periods: list[ForecastPeriodResponse]
+
+
+class LocationForecastResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    distance_m: float
+    lat: float
+    lon: float
+    elevation_m: float
+    is_high_point: bool
+    forecast: ForecastResponse | None
+
+
+class RouteConditions(BaseModel):
+    # A list of places rather than one forecast, and a field of its own so
+    # snow, streamflow and closures can sit beside it later.
+    weather: list[LocationForecastResponse]
+
+
 def get_elevation_filler(request: Request) -> ElevationFiller:
     return request.app.state.elevation_filler
+
+
+def get_weather_source(request: Request) -> WeatherSource:
+    return request.app.state.weather_source
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -113,3 +159,18 @@ def get_route_profile(
     # session.
     profile = build_profile(record_to_route(record).points)
     return RouteProfile.model_validate(profile)
+
+
+@router.get("/routes/{route_id}/conditions")
+def get_route_conditions(
+    route_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    weather: Annotated[WeatherSource, Depends(get_weather_source)],
+) -> RouteConditions:
+    record = session.get(RouteRecord, route_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"No route has id {route_id}.")
+    forecasts = get_route_forecasts(record_to_route(record).points, weather)
+    return RouteConditions(
+        weather=[LocationForecastResponse.model_validate(f) for f in forecasts]
+    )
