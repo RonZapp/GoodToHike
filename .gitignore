@@ -5,3 +5,4 @@ __pycache__/
 .ruff_cache/
 samples/osm/
 samples/mytrails
+goodtohike.db*

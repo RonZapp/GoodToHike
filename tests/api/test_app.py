@@ -1,4 +1,6 @@
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine, inspect
 
 from goodtohike.api.app import app, get_app
 
@@ -16,10 +18,17 @@ def test_health_is_not_served_without_the_version_prefix():
     assert response.status_code == 404
 
 
-def test_get_app_publishes_title_and_version_in_openapi():
-    client = TestClient(get_app(title="Trail Test", version="9.8.7"))
+def test_get_app_publishes_title_and_version_in_openapi(engine: Engine):
+    client = TestClient(get_app(title="Trail Test", version="9.8.7", engine=engine))
 
     info = client.get("/openapi.json").json()["info"]
 
     assert info["title"] == "Trail Test"
     assert info["version"] == "9.8.7"
+
+
+def test_startup_creates_the_tables(app: FastAPI, engine: Engine):
+    assert inspect(engine).get_table_names() == []
+
+    with TestClient(app):
+        assert inspect(engine).get_table_names() == ["routes"]

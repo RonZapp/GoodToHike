@@ -3,10 +3,12 @@
 submitting a track and reading back the route built from it.
 """
 
+from collections.abc import Iterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from goodtohike.elevation import ElevationFiller
 from goodtohike.geometry import get_cumulative_m
@@ -25,6 +27,12 @@ class RouteSummary(BaseModel):
 
 def get_elevation_filler(request: Request) -> ElevationFiller:
     return request.app.state.elevation_filler
+
+
+def get_session(request: Request) -> Iterator[Session]:
+    """A database session for one request, closed once the response is sent."""
+    with Session(request.app.state.engine) as session:
+        yield session
 
 
 @router.post("/routes", status_code=201)
