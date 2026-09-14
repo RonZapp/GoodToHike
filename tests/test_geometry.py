@@ -1,6 +1,11 @@
 import pytest
 
-from goodtohike.geometry import get_cumulative_m, get_hops_m, lerp_coordinate
+from goodtohike.geometry import (
+    get_cumulative_m,
+    get_hops_m,
+    get_spaced_indices,
+    lerp_coordinate,
+)
 
 # One degree of arc on gpxpy's sphere, radius 6,378,137 m. Written out rather
 # than computed, so a change to the underlying formula shows up here.
@@ -129,6 +134,103 @@ def test_out_and_back_ends_at_twice_one_way():
     one_way_m = get_cumulative_m(one_way)[-1]
 
     assert get_cumulative_m(out_and_back)[-1] == pytest.approx(2 * one_way_m)
+
+
+# get_spaced_indices
+
+
+def evenly(count: int, step_m: float) -> list[float]:
+    """Distance along a track of ``count`` points ``step_m`` apart."""
+    return [i * step_m for i in range(count)]
+
+
+def test_spaced_indices_of_single_point_is_that_point():
+    assert get_spaced_indices(range(1), [0.0], 50.0, max_count=10) == [0]
+
+
+def test_spaced_indices_always_include_both_ends():
+    distance = evenly(101, 10.0)
+
+    indices = get_spaced_indices(range(101), distance, 50.0, max_count=1_000)
+
+    assert indices[0] == 0
+    assert indices[-1] == 100
+
+
+def test_spaced_indices_land_on_the_spacing():
+    # 1,000 m at 10 m per point, so every fifth point is 50 m on.
+    distance = evenly(101, 10.0)
+
+    indices = get_spaced_indices(range(101), distance, 50.0, max_count=1_000)
+
+    assert indices == list(range(0, 101, 5))
+
+
+def test_spaced_indices_run_shorter_than_spacing_gives_only_the_ends():
+    distance = evenly(5, 10.0)
+
+    assert get_spaced_indices(range(5), distance, 50.0, max_count=1_000) == [0, 4]
+
+
+def test_spaced_indices_zero_spacing_gives_only_the_ends():
+    distance = evenly(5, 10.0)
+
+    assert get_spaced_indices(range(5), distance, 0.0, max_count=1_000) == [0, 4]
+
+
+def test_spaced_indices_never_exceed_max_count():
+    # 10 km wants 201 points at 50 m.
+    distance = evenly(1_001, 10.0)
+
+    indices = get_spaced_indices(range(1_001), distance, 50.0, max_count=20)
+
+    assert len(indices) == 20
+
+
+def test_spaced_indices_widen_spacing_when_capped():
+    distance = evenly(1_001, 10.0)
+
+    indices = get_spaced_indices(range(1_001), distance, 50.0, max_count=11)
+
+    # Eleven points over 10 km is one per kilometre.
+    assert [distance[i] for i in indices] == evenly(11, 1_000.0)
+
+
+def test_spaced_indices_stay_inside_the_run():
+    distance = evenly(101, 10.0)
+
+    indices = get_spaced_indices(range(20, 41), distance, 50.0, max_count=1_000)
+
+    assert indices == [20, 25, 30, 35, 40]
+
+
+def test_spaced_indices_take_the_nearest_point_to_each_target():
+    # A 60 m target sits between points at 55 m and 70 m, nearer the first.
+    distance = [0.0, 55.0, 70.0, 120.0]
+
+    indices = get_spaced_indices(range(4), distance, 60.0, max_count=1_000)
+
+    assert indices == [0, 1, 3]
+
+
+def test_spaced_indices_skip_repeats_across_a_sparse_stretch():
+    # One long hop swallows several targets, which all map to the same point.
+    distance = [0.0, 10.0, 500.0, 510.0]
+
+    indices = get_spaced_indices(range(4), distance, 50.0, max_count=1_000)
+
+    assert indices == sorted(set(indices))
+    assert indices[0] == 0
+    assert indices[-1] == 3
+
+
+def test_spaced_indices_handle_stationary_points():
+    distance = [0.0, 0.0, 0.0, 100.0, 100.0, 200.0]
+
+    indices = get_spaced_indices(range(6), distance, 100.0, max_count=1_000)
+
+    assert indices == sorted(set(indices))
+    assert [distance[i] for i in indices] == [0.0, 100.0, 200.0]
 
 
 # lerp_coordinate
