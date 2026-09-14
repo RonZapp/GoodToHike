@@ -8,6 +8,7 @@ from goodtohike.elevation import (
     InterpolateOnly,
     LookUpEveryPoint,
     LookUpGaps,
+    NoElevationError,
 )
 from goodtohike.geometry import get_cumulative_m
 from goodtohike.route import RawPoint
@@ -102,7 +103,7 @@ def test_interpolate_only_holds_gaps_at_either_end_flat():
 def test_interpolate_only_rejects_a_track_with_no_elevation():
     points = [north(0, None), north(100, None)]
 
-    with pytest.raises(ValueError, match="no elevation"):
+    with pytest.raises(NoElevationError, match="no elevation"):
         InterpolateOnly().fill(points)
 
 

@@ -32,6 +32,10 @@ DEFAULT_MAX_GAP_M = 250.0
 ElevationFetcher = Callable[[Sequence[tuple[float, float]]], Sequence[float]]
 
 
+class NoElevationError(ValueError):
+    """A track with no elevation at all, given to a filler that cannot look any up."""
+
+
 class ElevationFiller(Protocol):
     """A policy for giving every point an elevation.
 
@@ -60,7 +64,7 @@ class InterpolateOnly:
     def fill(self, points: Sequence[RawPoint]) -> list[Point]:
         """Fills missing elevations from the recorded ones.
 
-        Returns [] for an empty track. Raises ValueError when a track has no
+        Returns [] for an empty track. Raises NoElevationError when a track has no
         recorded elevations at all, since there is nothing to interpolate from.
         """
         if not points:
@@ -277,7 +281,7 @@ def _interpolate(
     known elevation or after the last hold it flat, rather than extrapolating a
     trend off the end of the data.
 
-    Raises ValueError when no elevation is known.
+    Raises NoElevationError when no elevation is known.
     """
     known = [
         (index, elevation)
@@ -285,7 +289,7 @@ def _interpolate(
         if elevation is not None
     ]
     if not known:
-        raise ValueError("track has no elevation to interpolate from")
+        raise NoElevationError("track has no elevation to interpolate from")
 
     first_index, first_elevation = known[0]
     filled = [first_elevation] * first_index
