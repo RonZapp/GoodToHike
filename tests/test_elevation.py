@@ -1,13 +1,20 @@
+from collections.abc import Sequence
+
 import pytest
 
 from goodtohike.elevation import (
+    HybridFill,
     InterpolateOnly,
 )
+from goodtohike.geometry import get_cumulative_m
 from goodtohike.route import RawPoint
 
 # One degree of arc on gpxpy's sphere, radius 6,378,137 m. Copied from
 # test_gaps.py; move both into a shared helper once a third file needs it.
 ONE_DEGREE_M = 111_319.49
+
+# Nothing real is this high, so an elevation carrying it came from a lookup.
+LOOKED_UP_M = 7_777.0
 
 
 def north(metres: float, elevation: float | None = None) -> RawPoint:
@@ -17,6 +24,30 @@ def north(metres: float, elevation: float | None = None) -> RawPoint:
 
 def elevations(points) -> list[float]:
     return [elevation for _, _, elevation in points]
+
+
+def coordinates(*points: RawPoint) -> list[tuple[float, float]]:
+    return [(lat, lon) for lat, lon, _ in points]
+
+
+class RecordingFetcher:
+    """Answers every lookup with LOOKED_UP_M and records what it was asked."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[tuple[float, float]]] = []
+
+    def __call__(self, coords: Sequence[tuple[float, float]]) -> list[float]:
+        self.calls.append(list(coords))
+        return [LOOKED_UP_M] * len(coords)
+
+    @property
+    def requested(self) -> list[tuple[float, float]]:
+        return [coord for call in self.calls for coord in call]
+
+
+def numbered(coords: Sequence[tuple[float, float]]) -> list[float]:
+    """A fetcher answering 0.0, 1.0, 2.0... so each answer shows where it went."""
+    return [float(i) for i in range(len(coords))]
 
 
 # InterpolateOnly
@@ -126,3 +157,177 @@ def test_interpolate_only_fills_several_gaps_between_several_known_elevations():
         pytest.approx(400.0, abs=0.01),
         500.0,
     ]
+
+
+# HybridFill
+
+
+def test_hybrid_fill_leaves_a_complete_track_unchanged_without_lookups():
+    fetch = RecordingFetcher()
+    points = [north(0, 100.0), north(80, 142.5), north(160, 97.0)]
+
+    assert HybridFill(fetch=fetch).fill(points) == points
+    assert fetch.calls == []
+
+
+def test_hybrid_fill_interpolates_a_short_gap_without_lookups():
+    fetch = RecordingFetcher()
+    points = [north(0, 100.0), north(100, None), north(200, 300.0)]
+
+    filled = HybridFill(fetch=fetch).fill(points)
+
+    assert fetch.calls == []
+    assert elevations(filled) == [100.0, pytest.approx(200.0, abs=0.01), 300.0]
+
+
+def test_hybrid_fill_looks_up_inside_a_long_gap_at_its_spacing():
+    # A 600 m bridge. The missing run spans 400 m, so 200 m spacing samples
+    # its first, middle and last points.
+    fetch = RecordingFetcher()
+    missing = [north(m) for m in (100, 200, 300, 400, 500)]
+    points = [north(0, 100.0), *missing, north(600, 700.0)]
+
+    filled = HybridFill(fetch=fetch, spacing_m=200.0).fill(points)
+
+    assert fetch.requested == coordinates(missing[0], missing[2], missing[4])
+    assert [elevations(filled)[i] for i in (1, 3, 5)] == [LOOKED_UP_M] * 3
+    assert elevations(filled)[0] == 100.0
+    assert elevations(filled)[-1] == 700.0
+
+
+def test_hybrid_fill_uses_its_spacing_setting():
+    fetch = RecordingFetcher()
+    missing = [north(m) for m in (100, 200, 300, 400, 500)]
+    points = [north(0, 100.0), *missing, north(600, 700.0)]
+
+    HybridFill(fetch=fetch, spacing_m=100.0).fill(points)
+
+    assert fetch.requested == coordinates(*missing)
+
+
+def test_hybrid_fill_decides_each_gap_separately():
+    fetch = RecordingFetcher()
+    points = [
+        north(0, 100.0),
+        north(100, None),  # 200 m bridge: interpolated
+        north(200, 100.0),
+        north(300, None),  # 600 m bridge: looked up
+        north(500, None),
+        north(700, None),
+        north(800, 100.0),
+    ]
+
+    filled = HybridFill(fetch=fetch).fill(points)
+
+    assert coordinates(points[1])[0] not in fetch.requested
+    assert elevations(filled)[1] == pytest.approx(100.0, abs=0.01)
+    assert set(fetch.requested) <= set(coordinates(*points[3:6]))
+    assert fetch.requested
+
+
+# Each track has one gap whose bridge runs the whole track: known elevation to
+# known elevation, track start to known elevation, and known elevation to
+# track end.
+ONE_GAP_TRACKS = [
+    pytest.param([north(0, 100.0), north(100), north(300, 300.0)], id="middle"),
+    pytest.param([north(0), north(100), north(250, 10.0)], id="leading"),
+    pytest.param([north(0, 10.0), north(100), north(250)], id="trailing"),
+]
+
+
+@pytest.mark.parametrize("points", ONE_GAP_TRACKS)
+def test_hybrid_fill_interpolates_a_gap_exactly_at_max_gap_m(points):
+    fetch = RecordingFetcher()
+    bridge_m = get_cumulative_m(points)[-1]
+
+    HybridFill(fetch=fetch, max_gap_m=bridge_m).fill(points)
+
+    assert fetch.calls == []
+
+
+@pytest.mark.parametrize("points", ONE_GAP_TRACKS)
+def test_hybrid_fill_looks_up_a_gap_just_over_max_gap_m(points):
+    fetch = RecordingFetcher()
+    bridge_m = get_cumulative_m(points)[-1]
+
+    HybridFill(fetch=fetch, max_gap_m=bridge_m - 0.01).fill(points)
+
+    missing = [point for point in points if point[2] is None]
+    assert fetch.requested == coordinates(*missing)
+
+
+def test_hybrid_fill_interpolates_between_its_lookups_by_distance():
+    # Lookups land on indices 1, 3 and 5 and answer 0.0, 1.0 and 2.0. The
+    # points between are halfway along the ground between two of them.
+    missing = [north(m) for m in (100, 200, 300, 400, 500)]
+    points = [north(0, 100.0), *missing, north(600, 700.0)]
+
+    filled = HybridFill(fetch=numbered, spacing_m=200.0).fill(points)
+
+    assert elevations(filled)[1:6] == [
+        0.0,
+        pytest.approx(0.5, abs=0.01),
+        1.0,
+        pytest.approx(1.5, abs=0.01),
+        2.0,
+    ]
+
+
+def test_hybrid_fill_holds_a_short_leading_gap_flat_without_lookups():
+    fetch = RecordingFetcher()
+    points = [north(0, None), north(100, 250.0), north(200, 260.0)]
+
+    filled = HybridFill(fetch=fetch).fill(points)
+
+    assert fetch.calls == []
+    assert elevations(filled)[0] == 250.0
+
+
+def test_hybrid_fill_looks_up_a_long_leading_gap_from_the_first_point():
+    fetch = RecordingFetcher()
+    points = [north(0), north(200), north(400), north(500, 300.0)]
+
+    filled = HybridFill(fetch=fetch).fill(points)
+
+    assert coordinates(points[0])[0] in fetch.requested
+    assert elevations(filled)[0] == LOOKED_UP_M
+
+
+def test_hybrid_fill_looks_up_a_short_track_with_no_elevation():
+    # 100 m is well under max_gap_m, but there is nothing to interpolate from.
+    fetch = RecordingFetcher()
+
+    filled = HybridFill(fetch=fetch).fill([north(0), north(100)])
+
+    assert fetch.requested
+    assert elevations(filled) == [LOOKED_UP_M, LOOKED_UP_M]
+
+
+def test_hybrid_fill_asks_for_every_long_gap_in_one_call():
+    fetch = RecordingFetcher()
+    points = [
+        north(0, 100.0),
+        north(300, None),
+        north(600, 100.0),
+        north(900, None),
+        north(1200, 100.0),
+    ]
+
+    HybridFill(fetch=fetch).fill(points)
+
+    assert len(fetch.calls) == 1
+    assert fetch.requested == coordinates(points[1], points[3])
+
+
+def test_hybrid_fill_rejects_a_fetcher_that_answers_the_wrong_count():
+    points = [north(0, 100.0), north(300, None), north(600, 100.0)]
+
+    with pytest.raises(ValueError, match="asked for 1 elevations, fetcher returned 0"):
+        HybridFill(fetch=lambda coords: []).fill(points)
+
+
+def test_hybrid_fill_of_an_empty_track_is_empty():
+    fetch = RecordingFetcher()
+
+    assert HybridFill(fetch=fetch).fill([]) == []
+    assert fetch.calls == []
