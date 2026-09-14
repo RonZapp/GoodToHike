@@ -1,5 +1,6 @@
 """Error responses in the RFC 9457 problem details format."""
 
+import logging
 from collections.abc import Mapping
 from http import HTTPStatus
 from typing import Any
@@ -9,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from goodtohike.clients.epqs import ElevationServiceError, NoElevationDataError
 from goodtohike.elevation import NoElevationError
 from goodtohike.gaps import TrackGapError
 from goodtohike.gpx import GpxError
@@ -23,6 +25,15 @@ NO_SPECIFIC_TYPE = "about:blank"
 # Deliberately fixed. An unexpected error's own message can expose internals
 # such as file paths or queries, so it goes to the server log, not the caller.
 UNEXPECTED_ERROR_DETAIL = "The server hit an unexpected error handling this request."
+
+# Fixed for the same reason. An elevation service error can carry part of the
+# upstream response, which is for the server log, not the caller.
+ELEVATION_SERVICE_DETAIL = (
+    "The elevation service failed to answer, so elevation for this track could "
+    "not be looked up. Try again later."
+)
+
+logger = logging.getLogger(__name__)
 
 
 def problem(
@@ -70,6 +81,40 @@ async def handle_no_elevation(request: Request, exc: Exception) -> JSONResponse:
         slug="no-elevation",
         title="Track has no elevation",
         detail=str(exc),
+    )
+
+
+async def handle_outside_elevation_coverage(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    assert isinstance(exc, NoElevationDataError)
+    # Built from the coordinates rather than str(exc), which quotes the elevation
+    # service's own wording, meaningless to an uploader.
+    return problem(
+        request,
+        status=422,
+        slug="outside-elevation-coverage",
+        title="Track is outside elevation coverage",
+        detail=(
+            f"No elevation data exists at {exc.lat}, {exc.lon}, so elevation "
+            "could not be looked up for this track. Lookups cover the United "
+            "States. Upload a track that carries its own elevation."
+        ),
+    )
+
+
+async def handle_elevation_service_error(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    # Unlike the catch-all 500, nothing re-raises a handled error, so this is
+    # the only place it can reach the server log.
+    logger.error("elevation service failed", exc_info=exc)
+    return problem(
+        request,
+        status=502,
+        slug="elevation-service-failed",
+        title="Elevation service failed",
+        detail=ELEVATION_SERVICE_DETAIL,
     )
 
 
@@ -130,6 +175,10 @@ async def handle_unexpected_error(request: Request, exc: Exception) -> JSONRespo
 def add_problem_handlers(app: FastAPI) -> None:
     app.add_exception_handler(TrackGapError, handle_track_gap)
     app.add_exception_handler(NoElevationError, handle_no_elevation)
+    # Starlette picks the handler for the most specific class in an error's
+    # MRO, so the subclass gets its own handler whatever the order here.
+    app.add_exception_handler(NoElevationDataError, handle_outside_elevation_coverage)
+    app.add_exception_handler(ElevationServiceError, handle_elevation_service_error)
     app.add_exception_handler(GpxError, handle_gpx_error)
     app.add_exception_handler(RequestValidationError, handle_invalid_request)
     # Starlette's class rather than FastAPI's subclass of it, because the

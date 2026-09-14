@@ -47,6 +47,28 @@ missing, since many devices write zero when they have no reading.
 
 Export the track again with elevation included.
 
+## outside-elevation-coverage
+
+**Status:** 422. **Title:** Track is outside elevation coverage.
+
+The track needed elevation looked up, and the elevation service has no data
+for at least one of its points. The service covers the United States, so the
+usual cause is a track elsewhere, or a point in open water. The `detail` names
+the first point found without data.
+
+Upload a track that carries its own elevation.
+
+## elevation-service-failed
+
+**Status:** 502. **Title:** Elevation service failed.
+
+The track needed elevation looked up, and the upstream elevation service did
+not give a usable answer: it timed out, kept failing after retries, or sent a
+response the server could not read. Nothing is wrong with the upload.
+
+Try again later. The `detail` is deliberately generic, and the error itself is
+logged on the server.
+
 ## invalid-gpx
 
 **Status:** 422. **Title:** The GPX could not be processed.

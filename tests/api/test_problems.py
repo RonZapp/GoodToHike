@@ -1,12 +1,15 @@
 from collections.abc import Sequence
 from pathlib import Path
 
+import httpx2
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
 from goodtohike.api.routes import get_elevation_filler
+from goodtohike.clients.epqs import EpqsClient
+from goodtohike.elevation import HybridFill
 from goodtohike.gpx import NO_POINTS, NOT_DECODABLE, NOT_GPX, ROUTE_NOT_TRACK
 from goodtohike.route import Point, RawPoint
 
@@ -31,6 +34,14 @@ class BrokenFiller:
 
     def fill(self, points: Sequence[RawPoint]) -> list[Point]:
         raise RuntimeError(INTERNAL_MESSAGE)
+
+
+def with_epqs_answering(app: FastAPI, response: Response) -> None:
+    """Fill elevation through a real EPQS client whose every answer is ``response``."""
+    transport = httpx2.MockTransport(lambda _: response)
+    epqs = EpqsClient(httpx2.Client(transport=transport), attempts=1)
+    filler = HybridFill(fetch=epqs.get_elevations)
+    app.dependency_overrides[get_elevation_filler] = lambda: filler
 
 
 def gpx(body: str) -> bytes:
@@ -104,6 +115,50 @@ def test_track_without_elevation_is_a_no_elevation_problem(client: TestClient):
 
     body = assert_problem(response, 422, "no-elevation")
     assert body["title"] == "Track has no elevation"
+
+
+# A track with no elevation, so a lookup filler has to ask for every point.
+NO_ELEVATION_TRACK = gpx(
+    "<trk><trkseg>"
+    '<trkpt lat="45.0" lon="-121.0"/>'
+    '<trkpt lat="45.0006" lon="-121.0"/>'
+    "</trkseg></trk>"
+)
+
+
+def test_track_outside_elevation_coverage_is_its_own_problem(app: FastAPI):
+    # What EPQS really sends for a point it has no data for.
+    with_epqs_answering(app, Response(200, text="Invalid or missing input parameters."))
+
+    response = upload(TestClient(app), NO_ELEVATION_TRACK)
+
+    body = assert_problem(response, 422, "outside-elevation-coverage")
+    assert body["title"] == "Track is outside elevation coverage"
+    assert "45.0, -121.0" in body["detail"]
+    # The service's own wording means nothing to an uploader.
+    assert "Invalid or missing input parameters" not in body["detail"]
+
+
+def test_elevation_service_failure_is_a_502_problem_that_hides_the_upstream_body(
+    app: FastAPI, caplog: pytest.LogCaptureFixture
+):
+    with_epqs_answering(app, Response(200, json={"value": INTERNAL_MESSAGE}))
+
+    response = upload(TestClient(app), NO_ELEVATION_TRACK)
+
+    body = assert_problem(response, 502, "elevation-service-failed")
+    assert body["title"] == "Elevation service failed"
+    assert INTERNAL_MESSAGE not in response.text
+    # Hidden from the caller, but still on record for whoever runs the server.
+    assert INTERNAL_MESSAGE in caplog.text
+
+
+def test_elevation_service_that_keeps_failing_is_a_502_problem(app: FastAPI):
+    with_epqs_answering(app, Response(503))
+
+    response = upload(TestClient(app), NO_ELEVATION_TRACK)
+
+    assert_problem(response, 502, "elevation-service-failed")
 
 
 @pytest.mark.parametrize(

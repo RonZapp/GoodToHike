@@ -29,6 +29,12 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Live tests stay out of the default run, so it is fast, offline, and cannot
+# flake in CI. Run them with `uv run pytest -m network`.
+addopts = "-m 'not network'"
+markers = [
+    "network: calls a real upstream service over the internet",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
