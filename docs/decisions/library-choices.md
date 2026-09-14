@@ -2,19 +2,19 @@
 
 Date: 2026-09-10
 
-Last updated: 2026-09-10
+Last updated: 2026-09-14
 
 ## HTTP Client
 
-**Choice:** httpx
+**Choice:** httpx2
 
-**Reason:** Sync and async clients with one API (Requests only has sync clients), upstream clients work unchanged if handlers go async. Built in mock for network-free testing.
+**Reason:** Sync and async clients with one API (Requests only has sync clients), upstream clients work unchanged if handlers go async. Built in mock for network-free testing. Maintained continuation of httpx, which has gone quiet; Starlette's test client deprecates httpx for it.
 
 ## Web framework
 
 **Choice:** FastAPI
 
-**Reason:** Generates the OpenAPI doc from type hints. Request and response validation come from type hints as well. FastAPI's test client is Httpx-based so one HTTP idiom covers tests for both the server and upstream clients.
+**Reason:** Generates the OpenAPI doc from type hints. Request and response validation come from type hints as well. FastAPI's test client runs on httpx2 so one HTTP idiom covers tests for both the server and upstream clients.
 
 ## Package management
 

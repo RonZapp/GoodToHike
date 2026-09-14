@@ -1,6 +1,6 @@
 """Client for the National Weather Service API."""
 
-import httpx
+import httpx2
 
 BASE_URL = "https://api.weather.gov"
 ACCEPT = "application/geo+json"
@@ -10,7 +10,7 @@ class NwsClient:
     base_url = BASE_URL
     accept = ACCEPT
 
-    def __init__(self, http: httpx.Client) -> None:
+    def __init__(self, http: httpx2.Client) -> None:
         self._http = http
 
     def _get(self, path: str) -> dict:

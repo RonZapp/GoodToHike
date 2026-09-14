@@ -1,21 +1,21 @@
-import httpx
+import httpx2
 import pytest
 
 from goodtohike.clients.nws import NwsClient
 
 
 def make_client(handler):
-    transport = httpx.MockTransport(handler)
-    return NwsClient(httpx.Client(transport=transport))
+    transport = httpx2.MockTransport(handler)
+    return NwsClient(httpx2.Client(transport=transport))
 
 
 def test_get_point_returns_parsed_body_and_sends_accept():
     seen = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen["url"] = str(request.url)
         seen["accept"] = request.headers["Accept"]
-        return httpx.Response(200, json={"properties": {"gridId": "LOX"}})
+        return httpx2.Response(200, json={"properties": {"gridId": "LOX"}})
 
     client = make_client(handler)
     result = client.get_point(34.2884, -117.6465)
@@ -26,21 +26,21 @@ def test_get_point_returns_parsed_body_and_sends_accept():
 
 
 def test_get_point_raises_on_http_error():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, json={"detail": "not found"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(404, json={"detail": "not found"})
 
     client = make_client(handler)
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(httpx2.HTTPStatusError):
         client.get_point(0, 0)
 
 
 def test_get_gridpoint_builds_grid_url():
     seen = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen["url"] = str(request.url)
-        return httpx.Response(
+        return httpx2.Response(
             200,
             json={
                 "properties": {
@@ -60,9 +60,9 @@ def test_get_gridpoint_builds_grid_url():
 def test_get_gridpoint_forecast_builds_forecast_url():
     seen = {}
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         seen["url"] = str(request.url)
-        return httpx.Response(200, json={"properties": {"periods": []}})
+        return httpx2.Response(200, json={"properties": {"periods": []}})
 
     client = make_client(handler)
     client.get_gridpoint_forecast("LOX", 178, 52)
@@ -71,10 +71,10 @@ def test_get_gridpoint_forecast_builds_forecast_url():
 
 
 def test_gridpoint_raises_on_http_error():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, json={"detail": "server error"})
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(500, json={"detail": "server error"})
 
     client = make_client(handler)
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(httpx2.HTTPStatusError):
         client.get_gridpoint("LOX", 178, 52)
