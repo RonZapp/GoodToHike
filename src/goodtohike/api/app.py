@@ -1,6 +1,5 @@
 """The GoodToHike HTTP application."""
 
-import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
@@ -22,10 +21,9 @@ from goodtohike.elevation import (
     LookUpGaps,
 )
 from goodtohike.http import make_http_client
+from goodtohike.settings import DEFAULT_ELEVATION_FILL, Settings
 
 V1_PREFIX = "/v1"
-
-DEFAULT_DATABASE_URL = "sqlite:///goodtohike.db"
 
 # How missing elevation is filled, chosen by name when the app starts.
 ELEVATION_FILLERS: dict[str, Callable[[httpx2.Client], ElevationFiller]] = {
@@ -36,7 +34,6 @@ ELEVATION_FILLERS: dict[str, Callable[[httpx2.Client], ElevationFiller]] = {
         fetch=EpqsClient(http).get_elevations
     ),
 }
-DEFAULT_ELEVATION_FILL = "hybrid"
 
 meta_router = APIRouter(tags=["meta"])
 
@@ -94,11 +91,10 @@ def get_app(
     return app
 
 
+settings = Settings()
 app = get_app(
     title="GoodToHike",
     version="0.1.0",
-    engine=create_engine(
-        os.environ.get("GOODTOHIKE_DATABASE_URL", DEFAULT_DATABASE_URL)
-    ),
-    elevation_fill=os.environ.get("GOODTOHIKE_ELEVATION_FILL", DEFAULT_ELEVATION_FILL),
+    engine=create_engine(settings.database_url),
+    elevation_fill=settings.elevation_fill,
 )

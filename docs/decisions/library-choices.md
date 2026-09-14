@@ -45,3 +45,12 @@ Last updated: 2026-09-14
 **Choice:** uvicorn
 
 **Reason:** FastAPI is a framework and ships no server, but Uvicorn is what FastAPI's own docs assume.
+
+
+## Settings manager
+
+**Choice:** pydantic-settings
+
+**Reason:**  typed settings from environment variables and .env, the approach FastAPI's own documentation recommends
+
+
