@@ -32,38 +32,44 @@ against the sensors near it and produces one document.
 
 All public. Most require no authentication.
 
-| Source | Provides | Auth |
-| --- | --- | --- |
-| OpenStreetMap (Overpass) | Trail geometry, water features, surface tags | None |
-| USGS Water Services | Real-time streamflow at gauge stations | None |
-| NRCS SNOTEL | Snow depth and water equivalent | None |
-| National Weather Service | Gridded point forecasts | None |
-| Open-Meteo | Historical precipitation and temperature | None |
-| USGS 3DEP | Elevation for profile computation | None |
-| National Park Service | Park alerts and closures | Free key |
-| NASA FIRMS | Active fire detections | Free key |
+✅ implemented · 🟨 partly implemented · ⬜ planned
+
+| Status | Source | Provides | Auth |
+| :---: | --- | --- | --- |
+| ⬜ | OpenStreetMap (Overpass) | Trail geometry, water features, surface tags | None |
+| ⬜ | USGS Water Services | Real-time streamflow at gauge stations | None |
+| ⬜ | NRCS SNOTEL | Snow depth and water equivalent | None |
+| ✅ | National Weather Service | Gridded point forecasts | None |
+| ⬜ | Open-Meteo | Historical precipitation and temperature | None |
+| ✅ | USGS 3DEP | Elevation for profile computation | None |
+| ⬜ | National Park Service | Park alerts and closures | Free key |
+| ⬜ | NASA FIRMS | Active fire detections | Free key |
 
 ## Endpoints
 
+✅ implemented · ⬜ planned
+
 Reads:
 
-```
-GET  /v1/routes/{id}              route metadata
-GET  /v1/routes/{id}/profile      elevation profile, grade, distance
-GET  /v1/routes/{id}/water        water sources with current reliability
-GET  /v1/routes/{id}/conditions   snow, streamflow, weather, closures, fire
-GET  /v1/sources/{id}/history     report history for a water source
-```
+| Status | Method | Path | Returns |
+| :---: | --- | --- | --- |
+| ✅ | `GET` | `/v1/routes/{id}` | Route metadata |
+| ✅ | `GET` | `/v1/routes/{id}/profile` | Elevation profile, grade, distance |
+| ⬜ | `GET` | `/v1/routes/{id}/water` | Water sources with current reliability |
+| ✅ | `GET` | `/v1/routes/{id}/conditions` | Snow, streamflow, weather, closures, fire. Weather only so far. |
+| ⬜ | `GET` | `/v1/routes/{id}/trail-reports` | Trail reports near a route |
+| ⬜ | `GET` | `/v1/plans/{id}` | A plan, with a day-by-day brief built from current conditions |
+| ⬜ | `GET` | `/v1/water-sources/{id}/reports` | Report history for a water source |
 
 Writes:
 
-```
-POST   /v1/routes                 ingest a GPX file or OSM relation
-POST   /v1/routes/{id}/plan       dates and pace, returns a day-by-day brief
-PATCH  /v1/plans/{id}
-POST   /v1/sources/{id}/reports   field report: flowing, trickle, dry
-POST   /v1/segments/{id}/reports  snow depth, blowdowns, ford passability
-```
+| Status | Method | Path | Does |
+| :---: | --- | --- | --- |
+| ✅ | `POST` | `/v1/routes` | Ingest a GPX file or OSM relation. GPX only so far. |
+| ⬜ | `POST` | `/v1/routes/{id}/plans` | Create a plan from dates and pace |
+| ⬜ | `PATCH` | `/v1/plans/{id}` | Change a plan's dates or pace |
+| ⬜ | `POST` | `/v1/water-sources/{id}/reports` | Field report: flowing, trickle, dry |
+| ⬜ | `POST` | `/v1/trail-reports` | Snow depth, blowdown, or ford at a location |
 
 ## Getting a route in
 
