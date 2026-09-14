@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="goodtohike synthetic fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <desc>One track containing a 55 km jump: someone stopped recording, drove, and resumed without starting a new track. Rejected for exceeding MAX_HOP_M.</desc>
+  </metadata>
+  <trk>
+    <name>Two Outings In One Track</name>
+    <trkseg>
+      <trkpt lat="45.000000" lon="-121.000000"><ele>1000</ele></trkpt>
+      <trkpt lat="45.000600" lon="-121.000000"><ele>1008</ele></trkpt>
+      <trkpt lat="45.001200" lon="-121.000000"><ele>1016</ele></trkpt>
+      <trkpt lat="45.001800" lon="-121.000000"><ele>1024</ele></trkpt>
+      <trkpt lat="45.002400" lon="-121.000000"><ele>1032</ele></trkpt>
+      <trkpt lat="45.003000" lon="-121.000000"><ele>1040</ele></trkpt>
+      <trkpt lat="45.003600" lon="-121.000000"><ele>1048</ele></trkpt>
+      <trkpt lat="45.004200" lon="-121.000000"><ele>1056</ele></trkpt>
+      <trkpt lat="45.004800" lon="-121.000000"><ele>1064</ele></trkpt>
+      <trkpt lat="45.005400" lon="-121.000000"><ele>1072</ele></trkpt>
+      <trkpt lat="45.006000" lon="-121.000000"><ele>1080</ele></trkpt>
+      <trkpt lat="45.006600" lon="-121.000000"><ele>1088</ele></trkpt>
+      <trkpt lat="45.007200" lon="-121.000000"><ele>1096</ele></trkpt>
+      <trkpt lat="45.007800" lon="-121.000000"><ele>1104</ele></trkpt>
+      <trkpt lat="45.008400" lon="-121.000000"><ele>1112</ele></trkpt>
+      <trkpt lat="45.009000" lon="-121.000000"><ele>1120</ele></trkpt>
+      <trkpt lat="45.009600" lon="-121.000000"><ele>1128</ele></trkpt>
+      <trkpt lat="45.010200" lon="-121.000000"><ele>1136</ele></trkpt>
+      <trkpt lat="45.010800" lon="-121.000000"><ele>1144</ele></trkpt>
+      <trkpt lat="45.011400" lon="-121.000000"><ele>1152</ele></trkpt>
+      <trkpt lat="45.012000" lon="-121.000000"><ele>1160</ele></trkpt>
+      <trkpt lat="45.012600" lon="-121.000000"><ele>1168</ele></trkpt>
+      <trkpt lat="45.013200" lon="-121.000000"><ele>1176</ele></trkpt>
+      <trkpt lat="45.013800" lon="-121.000000"><ele>1184</ele></trkpt>
+      <trkpt lat="45.500000" lon="-121.000000"><ele>800</ele></trkpt>
+      <trkpt lat="45.500600" lon="-121.000000"><ele>804</ele></trkpt>
+      <trkpt lat="45.501200" lon="-121.000000"><ele>808</ele></trkpt>
+      <trkpt lat="45.501800" lon="-121.000000"><ele>812</ele></trkpt>
+      <trkpt lat="45.502400" lon="-121.000000"><ele>816</ele></trkpt>
+      <trkpt lat="45.503000" lon="-121.000000"><ele>820</ele></trkpt>
+      <trkpt lat="45.503600" lon="-121.000000"><ele>824</ele></trkpt>
+      <trkpt lat="45.504200" lon="-121.000000"><ele>828</ele></trkpt>
+      <trkpt lat="45.504800" lon="-121.000000"><ele>832</ele></trkpt>
+      <trkpt lat="45.505400" lon="-121.000000"><ele>836</ele></trkpt>
+      <trkpt lat="45.506000" lon="-121.000000"><ele>840</ele></trkpt>
+      <trkpt lat="45.506600" lon="-121.000000"><ele>844</ele></trkpt>
+      <trkpt lat="45.507200" lon="-121.000000"><ele>848</ele></trkpt>
+      <trkpt lat="45.507800" lon="-121.000000"><ele>852</ele></trkpt>
+      <trkpt lat="45.508400" lon="-121.000000"><ele>856</ele></trkpt>
+      <trkpt lat="45.509000" lon="-121.000000"><ele>860</ele></trkpt>
+      <trkpt lat="45.509600" lon="-121.000000"><ele>864</ele></trkpt>
+      <trkpt lat="45.510200" lon="-121.000000"><ele>868</ele></trkpt>
+      <trkpt lat="45.510800" lon="-121.000000"><ele>872</ele></trkpt>
+      <trkpt lat="45.511400" lon="-121.000000"><ele>876</ele></trkpt>
+      <trkpt lat="45.512000" lon="-121.000000"><ele>880</ele></trkpt>
+      <trkpt lat="45.512600" lon="-121.000000"><ele>884</ele></trkpt>
+      <trkpt lat="45.513200" lon="-121.000000"><ele>888</ele></trkpt>
+      <trkpt lat="45.513800" lon="-121.000000"><ele>892</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
