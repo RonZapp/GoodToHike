@@ -1,3 +1,5 @@
+"""The shared HTTP client that every upstream client is built on."""
+
 from importlib.metadata import version
 
 import httpx

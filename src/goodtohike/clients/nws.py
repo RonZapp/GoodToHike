@@ -1,3 +1,5 @@
+"""Client for the National Weather Service API."""
+
 import httpx
 
 BASE_URL = "https://api.weather.gov"
