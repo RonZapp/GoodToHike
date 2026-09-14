@@ -2,6 +2,11 @@
 
 from fastapi import APIRouter, FastAPI
 
+from goodtohike.api.routes import router as routes_router
+from goodtohike.elevation import InterpolateOnly
+
+V1_PREFIX = "/v1"
+
 meta_router = APIRouter(tags=["meta"])
 
 
@@ -12,7 +17,14 @@ def get_health() -> dict[str, str]:
 
 def get_app(title: str, version: str) -> FastAPI:
     app = FastAPI(title=title, version=version)
-    app.include_router(meta_router, prefix="/v1")
+
+    # Even though its not necessary, adding specific v1 router to simulate
+    # usage of versioned routers for concept practice.
+    v1 = APIRouter(prefix=V1_PREFIX)
+    v1.include_router(meta_router)
+    v1.include_router(routes_router)
+    app.include_router(v1)
+    app.state.elevation_filler = InterpolateOnly()
     return app
 
 

@@ -139,6 +139,27 @@ def test_build_route_names_an_unnamed_track():
     assert route.name == UNNAMED
 
 
+def test_build_route_prefers_a_given_name_over_the_tracks():
+    track = ParsedTrack(
+        points=[north(0, 100.0), north(50, 110.0)], source="gpx", name="Tidal Zone 2"
+    )
+
+    route = build_route(track, RecordingFiller(), name="Lost Coast Trail")
+
+    assert route.name == "Lost Coast Trail"
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_build_route_ignores_a_blank_name(name):
+    track = ParsedTrack(
+        points=[north(0, 100.0), north(50, 110.0)], source="gpx", name="Tidal Zone 2"
+    )
+
+    route = build_route(track, RecordingFiller(), name=name)
+
+    assert route.name == "Tidal Zone 2"
+
+
 # build_route with InterpolateOnly, on real files
 
 

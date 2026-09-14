@@ -7,8 +7,17 @@ from goodtohike.route import ParsedTrack, Route
 UNNAMED = "Unnamed route"
 
 
-def build_route(track: ParsedTrack, filler: ElevationFiller) -> Route:
-    """Build a Route, filling elevation with the chosen filler."""
+def build_route(
+    track: ParsedTrack, filler: ElevationFiller, name: str | None = None
+) -> Route:
+    """Build a Route, filling elevation with the chosen filler.
+
+    A given ``name`` wins over the track's own.
+    A name that is empty or only whitespace counts as not given.
+    """
+    if name and not name.strip():
+        name = None
+
     # Geometry first. A jump too large to be one walk is rejected outright,
     # and everything else is straight-lined.
     check_track_joins(track.points, track.track_seams)
@@ -19,7 +28,7 @@ def build_route(track: ParsedTrack, filler: ElevationFiller) -> Route:
     points_with_elevations = filler.fill(points_without_gaps)
 
     return Route(
-        name=track.name or UNNAMED,
+        name=name or track.name or UNNAMED,
         points=points_with_elevations,
         source=track.source,
         inferred_ranges=inferred,
