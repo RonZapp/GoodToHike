@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, FastAPI
 
+from goodtohike.api.problems import add_problem_handlers
 from goodtohike.api.routes import router as routes_router
 from goodtohike.elevation import InterpolateOnly
 
@@ -17,6 +18,7 @@ def get_health() -> dict[str, str]:
 
 def get_app(title: str, version: str) -> FastAPI:
     app = FastAPI(title=title, version=version)
+    add_problem_handlers(app)
 
     # Even though its not necessary, adding specific v1 router to simulate
     # usage of versioned routers for concept practice.

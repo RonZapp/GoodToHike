@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
-from goodtohike.api.app import get_app
 from goodtohike.api.routes import get_elevation_filler
 from goodtohike.route import Point, RawPoint
 
@@ -28,17 +27,6 @@ class CountingFiller:
     def fill(self, points: Sequence[RawPoint]) -> list[Point]:
         self.calls += 1
         return [(lat, lon, FAKE_ELEVATION_M) for lat, lon, _ in points]
-
-
-@pytest.fixture
-def app() -> FastAPI:
-    # A fresh app per test, so a dependency override cannot leak into the next.
-    return get_app(title="GoodToHike", version="test")
-
-
-@pytest.fixture
-def client(app: FastAPI) -> TestClient:
-    return TestClient(app)
 
 
 def upload(client: TestClient, path: Path, **form: str) -> Response:
