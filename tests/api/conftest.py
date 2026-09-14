@@ -26,7 +26,10 @@ def engine() -> Iterator[Engine]:
 @pytest.fixture
 def app(engine: Engine) -> FastAPI:
     # A fresh app per test, so a dependency override cannot leak into the next.
-    return get_app(title="GoodToHike", version="test", engine=engine)
+    # Interpolation only, so no offline test can reach the elevation service.
+    return get_app(
+        title="GoodToHike", version="test", engine=engine, elevation_fill="interpolate"
+    )
 
 
 @pytest.fixture

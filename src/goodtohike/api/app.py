@@ -1,22 +1,41 @@
 """The GoodToHike HTTP application."""
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
+import httpx2
 from fastapi import APIRouter, FastAPI
 from sqlalchemy import Engine, create_engine
 
 from goodtohike.api.problems import add_problem_handlers
 from goodtohike.api.routes import router as routes_router
+from goodtohike.clients.epqs import EpqsClient
 from goodtohike.clients.nws import NwsClient, NwsWeather
 from goodtohike.db import Base
-from goodtohike.elevation import InterpolateOnly
+from goodtohike.elevation import (
+    ElevationFiller,
+    HybridFill,
+    InterpolateOnly,
+    LookUpEveryPoint,
+    LookUpGaps,
+)
 from goodtohike.http import make_http_client
 
 V1_PREFIX = "/v1"
 
 DEFAULT_DATABASE_URL = "sqlite:///goodtohike.db"
+
+# How missing elevation is filled, chosen by name when the app starts.
+ELEVATION_FILLERS: dict[str, Callable[[httpx2.Client], ElevationFiller]] = {
+    "hybrid": lambda http: HybridFill(fetch=EpqsClient(http).get_elevations),
+    "interpolate": lambda http: InterpolateOnly(),
+    "lookup-gaps": lambda http: LookUpGaps(fetch=EpqsClient(http).get_elevations),
+    "lookup-every-point": lambda http: LookUpEveryPoint(
+        fetch=EpqsClient(http).get_elevations
+    ),
+}
+DEFAULT_ELEVATION_FILL = "hybrid"
 
 meta_router = APIRouter(tags=["meta"])
 
@@ -36,7 +55,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine.dispose()
 
 
-def get_app(title: str, version: str, engine: Engine) -> FastAPI:
+def get_app(
+    title: str,
+    version: str,
+    engine: Engine,
+    elevation_fill: str = DEFAULT_ELEVATION_FILL,
+) -> FastAPI:
+    """Build the application.
+
+    Raises ValueError when ``elevation_fill`` names no strategy in
+    ``ELEVATION_FILLERS``, so a mistyped setting stops the app starting rather
+    than surfacing on the first upload.
+    """
+    try:
+        make_elevation_filler = ELEVATION_FILLERS[elevation_fill]
+    except KeyError:
+        raise ValueError(
+            f"unknown elevation fill {elevation_fill!r}, expected one of: "
+            + ", ".join(ELEVATION_FILLERS)
+        ) from None
+
     app = FastAPI(title=title, version=version, lifespan=lifespan)
     app.state.engine = engine
     add_problem_handlers(app)
@@ -47,9 +85,9 @@ def get_app(title: str, version: str, engine: Engine) -> FastAPI:
     v1.include_router(meta_router)
     v1.include_router(routes_router)
     app.include_router(v1)
-    app.state.elevation_filler = InterpolateOnly()
     # One pooled HTTP client for every upstream service, closed on shutdown.
     app.state.http = make_http_client()
+    app.state.elevation_filler = make_elevation_filler(app.state.http)
     app.state.weather_source = NwsWeather(NwsClient(app.state.http))
     return app
 
@@ -60,4 +98,5 @@ app = get_app(
     engine=create_engine(
         os.environ.get("GOODTOHIKE_DATABASE_URL", DEFAULT_DATABASE_URL)
     ),
+    elevation_fill=os.environ.get("GOODTOHIKE_ELEVATION_FILL", DEFAULT_ELEVATION_FILL),
 )

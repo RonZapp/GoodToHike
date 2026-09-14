@@ -41,8 +41,9 @@ extra tracks. Upload a file containing only the track that was walked.
 
 **Status:** 422. **Title:** Track has no elevation.
 
-No point in the track carries an elevation, and the server is filling
-elevation from the track's own data. Elevations of exactly zero count as
+No point in the track carries an elevation, and the server is set to fill
+elevation from the track's own data only, with `GOODTOHIKE_ELEVATION_FILL` set
+to `interpolate`. With the default setting, elevation is looked up instead. Elevations of exactly zero count as
 missing, since many devices write zero when they have no reading. So do
 elevations that are not numbers at all, such as `NaN` or `inf`.
 

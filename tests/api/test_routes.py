@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,6 +15,7 @@ from goodtohike.conditions import (
     GridCell,
     NoWeatherCoverageError,
 )
+from goodtohike.elevation import HybridFill
 from goodtohike.elevation_profile import MAX_PROFILE_POINTS, PROFILE_SPACING_M
 from goodtohike.route import Point, RawPoint
 
@@ -119,6 +121,31 @@ def test_upload_accepts_a_real_track(client: TestClient):
     # The Lost Coast Trail is about 40 km. A wide band, because the exact figure
     # moves whenever the gap thresholds are tuned.
     assert 35_000 < body["length_m"] < 45_000
+
+
+def test_upload_without_elevation_is_filled_by_lookups(
+    app: FastAPI, client: TestClient
+):
+    asked: list[tuple[float, float]] = []
+
+    def fetch(coordinates: Sequence[tuple[float, float]]) -> list[float]:
+        asked.extend(coordinates)
+        return [FAKE_ELEVATION_M] * len(coordinates)
+
+    app.dependency_overrides[get_elevation_filler] = lambda: HybridFill(fetch=fetch)
+    without_elevation = re.sub(
+        rb"<ele>[^<]*</ele>", b"", (SYNTHETIC / "one-clean-walk.gpx").read_bytes()
+    )
+
+    created = client.post(
+        "/v1/routes",
+        files={"file": ("walk.gpx", without_elevation, GPX_CONTENT_TYPE)},
+    )
+
+    assert created.status_code == 201
+    assert asked
+    profile = client.get(f"{created.headers['location']}/profile").json()
+    assert {point["elevation_m"] for point in profile["points"]} == {FAKE_ELEVATION_M}
 
 
 def test_uploaded_route_can_be_fetched_from_its_location(client: TestClient):
