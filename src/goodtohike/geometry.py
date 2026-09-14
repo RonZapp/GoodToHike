@@ -1,10 +1,4 @@
-"""Distance along a route, over our own point type.
-
-The spherical trigonometry comes from :mod:`gpxpy.geo`, whose functions take
-plain floats and are not tied to GPX in any way. Only the compositions that
-gpxpy has no equivalent for live here, because it offers cumulative distance
-solely as a method on its own objects.
-"""
+"""Distance along a route, over our own point type."""
 
 from collections.abc import Sequence
 
@@ -29,7 +23,7 @@ def get_cumulative_m(points: Sequence[RawPoint]) -> list[float]:
     cumulative = [0.0]
     for hop in get_hops_m(points):
         cumulative.append(cumulative[-1] + hop)
-    return cumulative if len(cumulative) > 1 else []
+    return cumulative if points else []
 
 
 def lerp_coordinate(
